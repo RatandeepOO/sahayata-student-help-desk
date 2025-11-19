@@ -47,6 +47,7 @@ export default function AuthPage() {
   const [year, setYear] = useState('');
   const [gender, setGender] = useState<'male' | 'female' | 'other'>('male');
   const [dob, setDob] = useState<Date>();
+  const [dobInput, setDobInput] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   
   // Signup state - Technical
@@ -162,6 +163,50 @@ export default function AuthPage() {
       toast.error(error.message || 'Login failed');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleDobChange = (value: string) => {
+    // Only allow numbers and /
+    const cleaned = value.replace(/[^\d/]/g, '');
+    
+    // Auto-format as user types
+    let formatted = cleaned;
+    if (cleaned.length >= 2 && cleaned[2] !== '/') {
+      formatted = cleaned.slice(0, 2) + '/' + cleaned.slice(2);
+    }
+    if (cleaned.length >= 5 && cleaned[5] !== '/') {
+      const parts = formatted.split('/');
+      if (parts.length === 2) {
+        formatted = parts[0] + '/' + parts[1].slice(0, 2) + '/' + parts[1].slice(2);
+      }
+    }
+    
+    // Limit to dd/mm/yy format (8 chars including slashes)
+    if (formatted.length <= 8) {
+      setDobInput(formatted);
+      
+      // Try to parse the date if format is complete
+      if (formatted.length === 8) {
+        const parts = formatted.split('/');
+        if (parts.length === 3) {
+          const day = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1; // JS months are 0-indexed
+          let year = parseInt(parts[2], 10);
+          
+          // Convert 2-digit year to 4-digit (assume 1900s-2000s)
+          if (year < 100) {
+            year += year > 50 ? 1900 : 2000;
+          }
+          
+          const date = new Date(year, month, day);
+          
+          // Validate the date
+          if (date.getDate() === day && date.getMonth() === month && date.getFullYear() === year) {
+            setDob(date);
+          }
+        }
+      }
     }
   };
 
@@ -495,30 +540,15 @@ export default function AuthPage() {
                     </div>
                     
                     <div className="space-y-2">
-                      <Label>Date of Birth</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "w-full justify-start text-left font-normal",
-                              !dob && "text-muted-foreground"
-                            )}
-                            disabled={isLoading}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {dob ? format(dob, "PPP") : <span>Pick a date</span>}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar
-                            mode="single"
-                            selected={dob}
-                            onSelect={setDob}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
+                      <Label htmlFor="dob">Date of Birth (DD/MM/YY)</Label>
+                      <Input
+                        id="dob"
+                        value={dobInput}
+                        onChange={(e) => handleDobChange(e.target.value)}
+                        placeholder="DD/MM/YY"
+                        disabled={isLoading}
+                        maxLength={8}
+                      />
                     </div>
                     
                     <Button type="submit" className="w-full" disabled={isLoading}>
