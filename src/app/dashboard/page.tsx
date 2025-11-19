@@ -132,24 +132,36 @@ export default function Dashboard() {
       return;
     }
 
+    // Convert user ID to number and validate
+    const userIdNum = typeof user.id === 'number' ? user.id : parseInt(String(user.id));
+    
+    if (isNaN(userIdNum)) {
+      toast.error('Invalid user ID. Please log in again.');
+      return;
+    }
+
     setSubmittingComplaint(true);
     try {
+      const payload = {
+        title: title.trim(),
+        description: description.trim(),
+        category,
+        difficulty,
+        emergency,
+        fixTillDate: format(fixTillDate, 'yyyy-MM-dd'),
+        photo: photo.trim() || undefined,
+        raisedBy: userIdNum,
+        raisedByName: user.name,
+        raisedByBranch: user.branch,
+        raisedByProfilePic: user.profilePicture,
+      };
+
+      console.log('Submitting complaint with payload:', payload);
+
       const res = await fetch('/api/complaints', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim(),
-          category,
-          difficulty,
-          emergency,
-          fixTillDate: format(fixTillDate, 'yyyy-MM-dd'),
-          photo: photo.trim() || undefined,
-          raisedBy: typeof user.id === 'number' ? user.id : parseInt(user.id),
-          raisedByName: user.name,
-          raisedByBranch: user.branch,
-          raisedByProfilePic: user.profilePicture,
-        }),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
@@ -163,7 +175,7 @@ export default function Dashboard() {
         setFixTillDate(undefined);
         setPhoto('');
         setDialogOpen(false);
-        loadData(typeof user.id === 'number' ? user.id : parseInt(user.id));
+        loadData(userIdNum);
       } else {
         const error = await res.json();
         toast.error(error.error || 'Failed to submit complaint');

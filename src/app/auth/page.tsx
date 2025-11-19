@@ -17,6 +17,7 @@ import { saveUser, setCurrentUser, getUsers, isAdminCredential, getAdminDepartme
 import { generateAvatar } from '@/lib/avatar';
 import { User, TechnicalTeamMember } from '@/lib/types';
 import Image from 'next/image';
+import { toast } from 'sonner';
 
 export default function AuthPage() {
   const router = useRouter();
@@ -47,44 +48,72 @@ export default function AuthPage() {
   const [department, setDepartment] = useState('');
   
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setLoading(true);
     
-    // Check admin credentials
-    if (isAdminCredential(loginEmail, loginPassword)) {
-      const adminUser: User = {
-        id: 'admin-' + Date.now(),
-        email: loginEmail,
-        password: loginPassword,
-        role: 'admin',
-        name: 'Admin',
-        branch: getAdminDepartment(loginEmail),
-        points: 0,
-      };
-      setCurrentUser(adminUser);
-      router.push('/admin/dashboard');
-      return;
-    }
-    
-    // Check regular users
-    const users = getUsers();
-    const user = users.find((u) => u.email === loginEmail && u.password === loginPassword);
-    
-    if (user) {
-      setCurrentUser(user);
-      if (user.role === 'student') {
-        router.push('/dashboard');
-      } else if (user.role === 'technical') {
-        router.push('/technical/dashboard');
+    try {
+      // Check admin credentials
+      if (isAdminCredential(loginEmail, loginPassword)) {
+        const adminUser: User = {
+          id: Date.now(),
+          email: loginEmail,
+          password: loginPassword,
+          role: 'admin',
+          name: 'Admin',
+          branch: getAdminDepartment(loginEmail),
+          points: 0,
+        };
+        setCurrentUser(adminUser);
+        router.push('/admin/dashboard');
+        return;
       }
-    } else {
-      setError('Invalid email or password');
+      
+      // Try API login first
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
+      });
+
+      if (res.ok) {
+        const user = await res.json();
+        setCurrentUser(user);
+        
+        if (user.role === 'student') {
+          router.push('/dashboard');
+        } else if (user.role === 'technical') {
+          router.push('/technical/dashboard');
+        }
+        return;
+      }
+      
+      // Fallback to localStorage
+      const users = getUsers();
+      const user = users.find((u) => u.email === loginEmail && u.password === loginPassword);
+      
+      if (user) {
+        setCurrentUser(user);
+        if (user.role === 'student') {
+          router.push('/dashboard');
+        } else if (user.role === 'technical') {
+          router.push('/technical/dashboard');
+        }
+      } else {
+        setError('Invalid email or password');
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      setError('Login failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleSignupStudent = (e: React.FormEvent) => {
+  const handleSignupStudent = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
@@ -94,36 +123,54 @@ export default function AuthPage() {
       return;
     }
     
-    // Check if user exists
-    const users = getUsers();
-    if (users.some((u) => u.email === studentEmail)) {
-      setError('Email already registered');
-      return;
+    setLoading(true);
+    
+    try {
+      // Create user via API
+      const newUser = {
+        email: studentEmail,
+        password: studentPassword,
+        role: 'student',
+        name: studentName,
+        branch,
+        rollNumber,
+        semester,
+        year,
+        gender,
+        dob: dob ? format(dob, 'yyyy-MM-dd') : undefined,
+        profilePicture: generateAvatar(gender, studentEmail),
+        phoneNumber,
+        points: 0,
+      };
+
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUser),
+      });
+
+      if (res.ok) {
+        const createdUser = await res.json();
+        setCurrentUser(createdUser);
+        toast.success('Account created successfully!');
+        router.push('/dashboard');
+      } else {
+        const errorData = await res.json();
+        if (errorData.code === 'USER_EXISTS') {
+          setError('Email already registered');
+        } else {
+          setError(errorData.error || 'Failed to create account');
+        }
+      }
+    } catch (error) {
+      console.error('Signup error:', error);
+      setError('Signup failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    
-    const newUser: User = {
-      id: 'student-' + Date.now(),
-      email: studentEmail,
-      password: studentPassword,
-      role: 'student',
-      name: studentName,
-      branch,
-      rollNumber,
-      semester,
-      year,
-      gender,
-      dob: dob ? format(dob, 'yyyy-MM-dd') : undefined,
-      profilePicture: generateAvatar(gender, studentEmail),
-      phoneNumber,
-      points: 0,
-    };
-    
-    saveUser(newUser);
-    setCurrentUser(newUser);
-    router.push('/dashboard');
   };
 
-  const handleSignupTechnical = (e: React.FormEvent) => {
+  const handleSignupTechnical = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
@@ -133,40 +180,60 @@ export default function AuthPage() {
       return;
     }
     
-    // Check if user exists
-    const users = getUsers();
-    if (users.some((u) => u.email === techEmail)) {
-      setError('Email already registered');
-      return;
+    setLoading(true);
+    
+    try {
+      // Create user via API
+      const newUser = {
+        email: techEmail,
+        password: techPassword,
+        role: 'technical',
+        name: techName,
+        department,
+        phoneNumber: techPhone,
+        profilePicture: generateAvatar('male', techEmail),
+        points: 0,
+      };
+
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newUser),
+      });
+
+      if (res.ok) {
+        const createdUser = await res.json();
+        
+        // Also add to technical team list
+        const techMemberRes = await fetch('/api/technical-team', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: techName,
+            department,
+            email: techEmail,
+            phoneNumber: techPhone,
+            available: true,
+          }),
+        });
+
+        setCurrentUser(createdUser);
+        toast.success('Account created successfully!');
+        router.push('/technical/dashboard');
+      } else {
+        const errorData = await res.json();
+        if (errorData.code === 'USER_EXISTS') {
+          setError('Email already registered');
+        } else {
+          setError(errorData.error || 'Failed to create account');
+        }
+      }
+    } catch (error) {
+      console.error('Signup error:', error);
+      setError('Signup failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
-    
-    const newUser: User = {
-      id: 'tech-' + Date.now(),
-      email: techEmail,
-      password: techPassword,
-      role: 'technical',
-      name: techName,
-      department,
-      phoneNumber: techPhone,
-      profilePicture: generateAvatar('male', techEmail),
-      points: 0,
-    };
-    
-    saveUser(newUser);
-    
-    // Also add to technical team list
-    const techMember: TechnicalTeamMember = {
-      id: newUser.id,
-      name: techName,
-      department,
-      email: techEmail,
-      phoneNumber: techPhone,
-      available: true,
-    };
-    saveTechnicalMember(techMember);
-    
-    setCurrentUser(newUser);
-    router.push('/technical/dashboard');
   };
 
   return (
@@ -207,6 +274,7 @@ export default function AuthPage() {
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
                     required
+                    disabled={loading}
                   />
                 </div>
                 <div className="space-y-2">
@@ -217,10 +285,13 @@ export default function AuthPage() {
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     required
+                    disabled={loading}
                   />
                 </div>
                 {error && <p className="text-sm text-red-600">{error}</p>}
-                <Button type="submit" className="w-full">Login</Button>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? 'Logging in...' : 'Login'}
+                </Button>
               </form>
             ) : (
               <Tabs value={userType} onValueChange={(v) => setUserType(v as 'student' | 'technical')}>
@@ -239,6 +310,7 @@ export default function AuthPage() {
                           value={studentName}
                           onChange={(e) => setStudentName(e.target.value)}
                           required
+                          disabled={loading}
                         />
                       </div>
                       <div className="space-y-2">
@@ -249,6 +321,7 @@ export default function AuthPage() {
                           value={studentEmail}
                           onChange={(e) => setStudentEmail(e.target.value)}
                           required
+                          disabled={loading}
                         />
                       </div>
                     </div>
@@ -262,6 +335,7 @@ export default function AuthPage() {
                           value={studentPassword}
                           onChange={(e) => setStudentPassword(e.target.value)}
                           required
+                          disabled={loading}
                         />
                       </div>
                       <div className="space-y-2">
@@ -271,6 +345,7 @@ export default function AuthPage() {
                           type="tel"
                           value={phoneNumber}
                           onChange={(e) => setPhoneNumber(e.target.value)}
+                          disabled={loading}
                         />
                       </div>
                     </div>
@@ -284,6 +359,7 @@ export default function AuthPage() {
                           onChange={(e) => setBranch(e.target.value)}
                           placeholder="e.g., Computer Science"
                           required
+                          disabled={loading}
                         />
                       </div>
                       <div className="space-y-2">
@@ -293,6 +369,7 @@ export default function AuthPage() {
                           value={rollNumber}
                           onChange={(e) => setRollNumber(e.target.value)}
                           required
+                          disabled={loading}
                         />
                       </div>
                     </div>
@@ -300,7 +377,7 @@ export default function AuthPage() {
                     <div className="grid grid-cols-3 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="semester">Semester</Label>
-                        <Select value={semester} onValueChange={setSemester}>
+                        <Select value={semester} onValueChange={setSemester} disabled={loading}>
                           <SelectTrigger>
                             <SelectValue placeholder="Select" />
                           </SelectTrigger>
@@ -313,7 +390,7 @@ export default function AuthPage() {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="year">Year</Label>
-                        <Select value={year} onValueChange={setYear}>
+                        <Select value={year} onValueChange={setYear} disabled={loading}>
                           <SelectTrigger>
                             <SelectValue placeholder="Select" />
                           </SelectTrigger>
@@ -327,7 +404,7 @@ export default function AuthPage() {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="gender">Gender</Label>
-                        <Select value={gender} onValueChange={(v) => setGender(v as 'male' | 'female' | 'other')}>
+                        <Select value={gender} onValueChange={(v) => setGender(v as 'male' | 'female' | 'other')} disabled={loading}>
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
@@ -350,6 +427,7 @@ export default function AuthPage() {
                               "w-full justify-start text-left font-normal",
                               !dob && "text-muted-foreground"
                             )}
+                            disabled={loading}
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
                             {dob ? format(dob, "PPP") : <span>Pick a date</span>}
@@ -367,7 +445,9 @@ export default function AuthPage() {
                     </div>
                     
                     {error && <p className="text-sm text-red-600">{error}</p>}
-                    <Button type="submit" className="w-full">Sign Up as Student</Button>
+                    <Button type="submit" className="w-full" disabled={loading}>
+                      {loading ? 'Creating account...' : 'Sign Up as Student'}
+                    </Button>
                   </form>
                 </TabsContent>
                 
@@ -380,6 +460,7 @@ export default function AuthPage() {
                         value={techName}
                         onChange={(e) => setTechName(e.target.value)}
                         required
+                        disabled={loading}
                       />
                     </div>
                     
@@ -391,6 +472,7 @@ export default function AuthPage() {
                         value={techEmail}
                         onChange={(e) => setTechEmail(e.target.value)}
                         required
+                        disabled={loading}
                       />
                     </div>
                     
@@ -402,6 +484,7 @@ export default function AuthPage() {
                         value={techPassword}
                         onChange={(e) => setTechPassword(e.target.value)}
                         required
+                        disabled={loading}
                       />
                     </div>
                     
@@ -413,12 +496,13 @@ export default function AuthPage() {
                         value={techPhone}
                         onChange={(e) => setTechPhone(e.target.value)}
                         required
+                        disabled={loading}
                       />
                     </div>
                     
                     <div className="space-y-2">
                       <Label htmlFor="department">Department *</Label>
-                      <Select value={department} onValueChange={setDepartment}>
+                      <Select value={department} onValueChange={setDepartment} disabled={loading}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select Department" />
                         </SelectTrigger>
@@ -433,7 +517,9 @@ export default function AuthPage() {
                     </div>
                     
                     {error && <p className="text-sm text-red-600">{error}</p>}
-                    <Button type="submit" className="w-full">Sign Up as Technical Team</Button>
+                    <Button type="submit" className="w-full" disabled={loading}>
+                      {loading ? 'Creating account...' : 'Sign Up as Technical Team'}
+                    </Button>
                   </form>
                 </TabsContent>
               </Tabs>
