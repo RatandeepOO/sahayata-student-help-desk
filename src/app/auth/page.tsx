@@ -6,22 +6,32 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { CalendarIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
-import { saveUser, setCurrentUser, getUsers, isAdminCredential, getAdminDepartment, saveTechnicalMember } from '@/lib/storage';
 import { generateAvatar } from '@/lib/avatar';
-import { User, TechnicalTeamMember } from '@/lib/types';
+import { createClient } from '@/lib/supabase/client';
 import Image from 'next/image';
+import { toast } from 'sonner';
+
+const ADMIN_CREDENTIALS = [
+  { email: 'cse@sahayata.com', password: 'CSEADMIN', department: 'CSE' },
+  { email: 'elex@sahayata.com', password: 'ELEXADMIN', department: 'Electronics' },
+  { email: 'pharma@sahayata.com', password: 'PHARMAADMIN', department: 'Pharmacy' },
+  { email: 'mech@sahayata.com', password: 'MECHADMIN', department: 'Mechanical' },
+  { email: 'elec@sahayata.com', password: 'ELECADMIN', department: 'Electrical' },
+];
 
 export default function AuthPage() {
   const router = useRouter();
+  const supabase = createClient();
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
   const [userType, setUserType] = useState<'student' | 'technical'>('student');
+  const [isLoading, setIsLoading] = useState(false);
   
   // Login state
   const [loginEmail, setLoginEmail] = useState('');
@@ -45,128 +55,263 @@ export default function AuthPage() {
   const [techPassword, setTechPassword] = useState('');
   const [techPhone, setTechPhone] = useState('');
   const [department, setDepartment] = useState('');
-  
-  const [error, setError] = useState('');
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setIsLoading(true);
     
-    // Check admin credentials
-    if (isAdminCredential(loginEmail, loginPassword)) {
-      const adminUser: User = {
-        id: 'admin-' + Date.now(),
+    try {
+      // Check if admin credentials
+      const adminCred = ADMIN_CREDENTIALS.find(
+        (cred) => cred.email === loginEmail && cred.password === loginPassword
+      );
+      
+      if (adminCred) {
+        // Admin login - create session without Supabase auth
+        const { data: adminUser, error: adminFetchError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('email', loginEmail)
+          .eq('role', 'admin')
+          .single();
+
+        if (adminFetchError || !adminUser) {
+          // Create admin user if doesn't exist
+          const { data: authData, error: authError } = await supabase.auth.signUp({
+            email: loginEmail,
+            password: loginPassword,
+            options: {
+              data: {
+                role: 'admin',
+                name: 'Admin',
+              },
+            },
+          });
+
+          if (authError) throw authError;
+
+          if (authData.user) {
+            const { error: insertError } = await supabase.from('users').insert({
+              auth_user_id: authData.user.id,
+              email: loginEmail,
+              role: 'admin',
+              name: 'Admin',
+              branch: adminCred.department,
+              points: 0,
+            });
+
+            if (insertError) throw insertError;
+          }
+        }
+
+        // Sign in admin
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email: loginEmail,
+          password: loginPassword,
+        });
+
+        if (signInError) throw signInError;
+
+        toast.success('Admin login successful!');
+        router.push('/admin/dashboard');
+        return;
+      }
+      
+      // Regular user login
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email: loginEmail,
         password: loginPassword,
-        role: 'admin',
-        name: 'Admin',
-        branch: getAdminDepartment(loginEmail),
-        points: 0,
-      };
-      setCurrentUser(adminUser);
-      router.push('/admin/dashboard');
-      return;
-    }
-    
-    // Check regular users
-    const users = getUsers();
-    const user = users.find((u) => u.email === loginEmail && u.password === loginPassword);
-    
-    if (user) {
-      setCurrentUser(user);
-      if (user.role === 'student') {
-        router.push('/dashboard');
-      } else if (user.role === 'technical') {
-        router.push('/technical/dashboard');
+      });
+      
+      if (signInError) {
+        toast.error('Invalid email or password');
+        return;
       }
-    } else {
-      setError('Invalid email or password');
+      
+      // Get user data
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      
+      if (!authUser) {
+        toast.error('Login failed');
+        return;
+      }
+      
+      const { data: userData, error: userError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('auth_user_id', authUser.id)
+        .single();
+      
+      if (userError || !userData) {
+        toast.error('User data not found');
+        return;
+      }
+      
+      toast.success('Login successful!');
+      
+      // Redirect based on role
+      if (userData.role === 'student') {
+        router.push('/dashboard');
+      } else if (userData.role === 'technical') {
+        router.push('/technical/dashboard');
+      } else if (userData.role === 'admin') {
+        router.push('/admin/dashboard');
+      }
+    } catch (error: any) {
+      console.error('Login error:', error);
+      toast.error(error.message || 'Login failed');
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleSignupStudent = (e: React.FormEvent) => {
+  const handleSignupStudent = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setIsLoading(true);
     
-    // Validation
-    if (!studentName || !studentEmail || !studentPassword || !branch || !rollNumber) {
-      setError('Please fill in all required fields');
-      return;
+    try {
+      // Validation
+      if (!studentName || !studentEmail || !studentPassword || !branch || !rollNumber) {
+        toast.error('Please fill in all required fields');
+        return;
+      }
+      
+      // Create auth user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: studentEmail,
+        password: studentPassword,
+        options: {
+          data: {
+            name: studentName,
+            role: 'student',
+          },
+        },
+      });
+      
+      if (authError) {
+        if (authError.message.includes('already registered')) {
+          toast.error('Email already registered');
+        } else {
+          toast.error(authError.message);
+        }
+        return;
+      }
+      
+      if (!authData.user) {
+        toast.error('Signup failed');
+        return;
+      }
+      
+      // Create user profile
+      const { error: insertError } = await supabase.from('users').insert({
+        auth_user_id: authData.user.id,
+        email: studentEmail,
+        role: 'student',
+        name: studentName,
+        branch,
+        roll_number: rollNumber,
+        semester,
+        year,
+        gender,
+        dob: dob ? format(dob, 'yyyy-MM-dd') : null,
+        profile_picture: generateAvatar(gender, studentEmail),
+        phone_number: phoneNumber,
+        points: 0,
+      });
+      
+      if (insertError) {
+        console.error('Insert error:', insertError);
+        toast.error('Failed to create user profile');
+        return;
+      }
+      
+      toast.success('Student account created successfully!');
+      router.push('/dashboard');
+    } catch (error: any) {
+      console.error('Signup error:', error);
+      toast.error(error.message || 'Signup failed');
+    } finally {
+      setIsLoading(false);
     }
-    
-    // Check if user exists
-    const users = getUsers();
-    if (users.some((u) => u.email === studentEmail)) {
-      setError('Email already registered');
-      return;
-    }
-    
-    const newUser: User = {
-      id: 'student-' + Date.now(),
-      email: studentEmail,
-      password: studentPassword,
-      role: 'student',
-      name: studentName,
-      branch,
-      rollNumber,
-      semester,
-      year,
-      gender,
-      dob: dob ? format(dob, 'yyyy-MM-dd') : undefined,
-      profilePicture: generateAvatar(gender, studentEmail),
-      phoneNumber,
-      points: 0,
-    };
-    
-    saveUser(newUser);
-    setCurrentUser(newUser);
-    router.push('/dashboard');
   };
 
-  const handleSignupTechnical = (e: React.FormEvent) => {
+  const handleSignupTechnical = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setIsLoading(true);
     
-    // Validation
-    if (!techName || !techEmail || !techPassword || !techPhone || !department) {
-      setError('Please fill in all required fields');
-      return;
+    try {
+      // Validation
+      if (!techName || !techEmail || !techPassword || !techPhone || !department) {
+        toast.error('Please fill in all required fields');
+        return;
+      }
+      
+      // Create auth user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: techEmail,
+        password: techPassword,
+        options: {
+          data: {
+            name: techName,
+            role: 'technical',
+          },
+        },
+      });
+      
+      if (authError) {
+        if (authError.message.includes('already registered')) {
+          toast.error('Email already registered');
+        } else {
+          toast.error(authError.message);
+        }
+        return;
+      }
+      
+      if (!authData.user) {
+        toast.error('Signup failed');
+        return;
+      }
+      
+      // Create user profile
+      const { data: userData, error: insertError } = await supabase.from('users').insert({
+        auth_user_id: authData.user.id,
+        email: techEmail,
+        role: 'technical',
+        name: techName,
+        department,
+        phone_number: techPhone,
+        profile_picture: generateAvatar('male', techEmail),
+        points: 0,
+      }).select().single();
+      
+      if (insertError) {
+        console.error('Insert error:', insertError);
+        toast.error('Failed to create user profile');
+        return;
+      }
+      
+      // Add to technical team table
+      const { error: techError } = await supabase.from('technical_team').insert({
+        id: userData.id,
+        name: techName,
+        department,
+        email: techEmail,
+        phone_number: techPhone,
+        available: true,
+      });
+      
+      if (techError) {
+        console.error('Technical team insert error:', techError);
+      }
+      
+      toast.success('Technical team account created successfully!');
+      router.push('/technical/dashboard');
+    } catch (error: any) {
+      console.error('Signup error:', error);
+      toast.error(error.message || 'Signup failed');
+    } finally {
+      setIsLoading(false);
     }
-    
-    // Check if user exists
-    const users = getUsers();
-    if (users.some((u) => u.email === techEmail)) {
-      setError('Email already registered');
-      return;
-    }
-    
-    const newUser: User = {
-      id: 'tech-' + Date.now(),
-      email: techEmail,
-      password: techPassword,
-      role: 'technical',
-      name: techName,
-      department,
-      phoneNumber: techPhone,
-      profilePicture: generateAvatar('male', techEmail),
-      points: 0,
-    };
-    
-    saveUser(newUser);
-    
-    // Also add to technical team list
-    const techMember: TechnicalTeamMember = {
-      id: newUser.id,
-      name: techName,
-      department,
-      email: techEmail,
-      phoneNumber: techPhone,
-      available: true,
-    };
-    saveTechnicalMember(techMember);
-    
-    setCurrentUser(newUser);
-    router.push('/technical/dashboard');
   };
 
   return (
@@ -207,6 +352,7 @@ export default function AuthPage() {
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
                     required
+                    disabled={isLoading}
                   />
                 </div>
                 <div className="space-y-2">
@@ -217,10 +363,12 @@ export default function AuthPage() {
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     required
+                    disabled={isLoading}
                   />
                 </div>
-                {error && <p className="text-sm text-red-600">{error}</p>}
-                <Button type="submit" className="w-full">Login</Button>
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? 'Logging in...' : 'Login'}
+                </Button>
               </form>
             ) : (
               <Tabs value={userType} onValueChange={(v) => setUserType(v as 'student' | 'technical')}>
@@ -239,6 +387,7 @@ export default function AuthPage() {
                           value={studentName}
                           onChange={(e) => setStudentName(e.target.value)}
                           required
+                          disabled={isLoading}
                         />
                       </div>
                       <div className="space-y-2">
@@ -249,6 +398,7 @@ export default function AuthPage() {
                           value={studentEmail}
                           onChange={(e) => setStudentEmail(e.target.value)}
                           required
+                          disabled={isLoading}
                         />
                       </div>
                     </div>
@@ -262,6 +412,7 @@ export default function AuthPage() {
                           value={studentPassword}
                           onChange={(e) => setStudentPassword(e.target.value)}
                           required
+                          disabled={isLoading}
                         />
                       </div>
                       <div className="space-y-2">
@@ -271,6 +422,7 @@ export default function AuthPage() {
                           type="tel"
                           value={phoneNumber}
                           onChange={(e) => setPhoneNumber(e.target.value)}
+                          disabled={isLoading}
                         />
                       </div>
                     </div>
@@ -284,6 +436,7 @@ export default function AuthPage() {
                           onChange={(e) => setBranch(e.target.value)}
                           placeholder="e.g., Computer Science"
                           required
+                          disabled={isLoading}
                         />
                       </div>
                       <div className="space-y-2">
@@ -293,6 +446,7 @@ export default function AuthPage() {
                           value={rollNumber}
                           onChange={(e) => setRollNumber(e.target.value)}
                           required
+                          disabled={isLoading}
                         />
                       </div>
                     </div>
@@ -300,7 +454,7 @@ export default function AuthPage() {
                     <div className="grid grid-cols-3 gap-4">
                       <div className="space-y-2">
                         <Label htmlFor="semester">Semester</Label>
-                        <Select value={semester} onValueChange={setSemester}>
+                        <Select value={semester} onValueChange={setSemester} disabled={isLoading}>
                           <SelectTrigger>
                             <SelectValue placeholder="Select" />
                           </SelectTrigger>
@@ -313,7 +467,7 @@ export default function AuthPage() {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="year">Year</Label>
-                        <Select value={year} onValueChange={setYear}>
+                        <Select value={year} onValueChange={setYear} disabled={isLoading}>
                           <SelectTrigger>
                             <SelectValue placeholder="Select" />
                           </SelectTrigger>
@@ -327,7 +481,7 @@ export default function AuthPage() {
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="gender">Gender</Label>
-                        <Select value={gender} onValueChange={(v) => setGender(v as 'male' | 'female' | 'other')}>
+                        <Select value={gender} onValueChange={(v) => setGender(v as 'male' | 'female' | 'other')} disabled={isLoading}>
                           <SelectTrigger>
                             <SelectValue />
                           </SelectTrigger>
@@ -350,6 +504,7 @@ export default function AuthPage() {
                               "w-full justify-start text-left font-normal",
                               !dob && "text-muted-foreground"
                             )}
+                            disabled={isLoading}
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
                             {dob ? format(dob, "PPP") : <span>Pick a date</span>}
@@ -366,8 +521,9 @@ export default function AuthPage() {
                       </Popover>
                     </div>
                     
-                    {error && <p className="text-sm text-red-600">{error}</p>}
-                    <Button type="submit" className="w-full">Sign Up as Student</Button>
+                    <Button type="submit" className="w-full" disabled={isLoading}>
+                      {isLoading ? 'Creating account...' : 'Sign Up as Student'}
+                    </Button>
                   </form>
                 </TabsContent>
                 
@@ -380,6 +536,7 @@ export default function AuthPage() {
                         value={techName}
                         onChange={(e) => setTechName(e.target.value)}
                         required
+                        disabled={isLoading}
                       />
                     </div>
                     
@@ -391,6 +548,7 @@ export default function AuthPage() {
                         value={techEmail}
                         onChange={(e) => setTechEmail(e.target.value)}
                         required
+                        disabled={isLoading}
                       />
                     </div>
                     
@@ -402,6 +560,7 @@ export default function AuthPage() {
                         value={techPassword}
                         onChange={(e) => setTechPassword(e.target.value)}
                         required
+                        disabled={isLoading}
                       />
                     </div>
                     
@@ -413,12 +572,13 @@ export default function AuthPage() {
                         value={techPhone}
                         onChange={(e) => setTechPhone(e.target.value)}
                         required
+                        disabled={isLoading}
                       />
                     </div>
                     
                     <div className="space-y-2">
                       <Label htmlFor="department">Department *</Label>
-                      <Select value={department} onValueChange={setDepartment}>
+                      <Select value={department} onValueChange={setDepartment} disabled={isLoading}>
                         <SelectTrigger>
                           <SelectValue placeholder="Select Department" />
                         </SelectTrigger>
@@ -432,8 +592,9 @@ export default function AuthPage() {
                       </Select>
                     </div>
                     
-                    {error && <p className="text-sm text-red-600">{error}</p>}
-                    <Button type="submit" className="w-full">Sign Up as Technical Team</Button>
+                    <Button type="submit" className="w-full" disabled={isLoading}>
+                      {isLoading ? 'Creating account...' : 'Sign Up as Technical Team'}
+                    </Button>
                   </form>
                 </TabsContent>
               </Tabs>
