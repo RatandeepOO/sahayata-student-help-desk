@@ -33,6 +33,11 @@ export default function AdminDashboard() {
   const [messageContent, setMessageContent] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
 
+  // Delete confirmation dialog state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [complaintToDelete, setComplaintToDelete] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   useEffect(() => {
     const currentUser = getCurrentUser();
     if (!currentUser || currentUser.role !== 'admin') {
@@ -75,17 +80,23 @@ export default function AdminDashboard() {
   };
 
   const handleDeleteComplaint = async (complaintId: number) => {
-    if (!confirm('Are you sure you want to delete this complaint? This action cannot be undone.')) {
-      return;
-    }
+    setComplaintToDelete(complaintId);
+    setDeleteDialogOpen(true);
+  };
 
+  const confirmDelete = async () => {
+    if (!complaintToDelete || deleting) return;
+
+    setDeleting(true);
     try {
-      const res = await fetch(`/api/complaints?id=${complaintId}`, {
+      const res = await fetch(`/api/complaints?id=${complaintToDelete}`, {
         method: 'DELETE',
       });
 
       if (res.ok) {
         toast.success('Complaint deleted successfully');
+        setDeleteDialogOpen(false);
+        setComplaintToDelete(null);
         loadData();
       } else {
         const error = await res.json();
@@ -94,6 +105,8 @@ export default function AdminDashboard() {
     } catch (error) {
       console.error('Error deleting complaint:', error);
       toast.error('Failed to delete complaint');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -489,6 +502,26 @@ export default function AdminDashboard() {
                   {sendingMessage ? 'Sending...' : 'Send Message'}
                 </Button>
               </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Complaint</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete this complaint? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button variant="outline" onClick={() => setDeleteDialogOpen(false)} disabled={deleting}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+                {deleting ? 'Deleting...' : 'Delete'}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
