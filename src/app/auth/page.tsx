@@ -62,13 +62,16 @@ export default function AuthPage() {
     setIsLoading(true);
     
     try {
+      console.log('Attempting login with:', loginEmail);
+      
       // Check if admin credentials
       const adminCred = ADMIN_CREDENTIALS.find(
         (cred) => cred.email === loginEmail && cred.password === loginPassword
       );
       
       if (adminCred) {
-        // Admin login - create session without Supabase auth
+        console.log('Admin login detected');
+        // Admin login - check if admin exists
         const { data: adminUser, error: adminFetchError } = await supabase
           .from('users')
           .select('*')
@@ -77,11 +80,13 @@ export default function AuthPage() {
           .single();
 
         if (adminFetchError || !adminUser) {
-          // Create admin user if doesn't exist
+          console.log('Admin user not found, creating...');
+          // Create admin user
           const { data: authData, error: authError } = await supabase.auth.signUp({
             email: loginEmail,
             password: loginPassword,
             options: {
+              emailRedirectTo: undefined,
               data: {
                 role: 'admin',
                 name: 'Admin',
@@ -89,7 +94,14 @@ export default function AuthPage() {
             },
           });
 
-          if (authError) throw authError;
+          console.log('Admin auth signup result:', { authData, authError });
+
+          if (authError) {
+            console.error('Admin auth error:', authError);
+            toast.error(`Admin signup failed: ${authError.message}`);
+            setIsLoading(false);
+            return;
+          }
 
           if (authData.user) {
             const { error: insertError } = await supabase.from('users').insert({
@@ -101,17 +113,31 @@ export default function AuthPage() {
               points: 0,
             });
 
-            if (insertError) throw insertError;
+            console.log('Admin user insert result:', insertError);
+
+            if (insertError) {
+              console.error('Admin insert error:', insertError);
+              toast.error(`Failed to create admin profile: ${insertError.message}`);
+              setIsLoading(false);
+              return;
+            }
           }
         }
 
         // Sign in admin
-        const { error: signInError } = await supabase.auth.signInWithPassword({
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
           email: loginEmail,
           password: loginPassword,
         });
 
-        if (signInError) throw signInError;
+        console.log('Admin sign in result:', { signInData, signInError });
+
+        if (signInError) {
+          console.error('Admin sign in error:', signInError);
+          toast.error(`Admin login failed: ${signInError.message}`);
+          setIsLoading(false);
+          return;
+        }
 
         toast.success('Admin login successful!');
         router.push('/admin/dashboard');
@@ -119,21 +145,29 @@ export default function AuthPage() {
       }
       
       // Regular user login
-      const { error: signInError } = await supabase.auth.signInWithPassword({
+      console.log('Regular user login');
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
         email: loginEmail,
         password: loginPassword,
       });
       
+      console.log('Sign in result:', { signInData, signInError });
+      
       if (signInError) {
-        toast.error('Invalid email or password');
+        console.error('Sign in error:', signInError);
+        toast.error(`Login failed: ${signInError.message}`);
+        setIsLoading(false);
         return;
       }
       
       // Get user data
-      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const { data: { user: authUser }, error: getUserError } = await supabase.auth.getUser();
+      
+      console.log('Get user result:', { authUser, getUserError });
       
       if (!authUser) {
-        toast.error('Login failed');
+        toast.error('Login failed: User not found');
+        setIsLoading(false);
         return;
       }
       
@@ -143,8 +177,12 @@ export default function AuthPage() {
         .eq('auth_user_id', authUser.id)
         .single();
       
+      console.log('User data query result:', { userData, userError });
+      
       if (userError || !userData) {
-        toast.error('User data not found');
+        console.error('User data error:', userError);
+        toast.error('User profile not found. Please contact support.');
+        setIsLoading(false);
         return;
       }
       
@@ -215,17 +253,29 @@ export default function AuthPage() {
     setIsLoading(true);
     
     try {
+      console.log('Starting student signup...');
+      
       // Validation
       if (!studentName || !studentEmail || !studentPassword || !branch || !rollNumber) {
         toast.error('Please fill in all required fields');
+        setIsLoading(false);
         return;
       }
+
+      if (studentPassword.length < 6) {
+        toast.error('Password must be at least 6 characters');
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log('Creating auth user for student:', studentEmail);
       
       // Create auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: studentEmail,
         password: studentPassword,
         options: {
+          emailRedirectTo: undefined,
           data: {
             name: studentName,
             role: 'student',
@@ -233,22 +283,29 @@ export default function AuthPage() {
         },
       });
       
+      console.log('Auth signup result:', { authData, authError });
+      
       if (authError) {
+        console.error('Auth error:', authError);
         if (authError.message.includes('already registered')) {
-          toast.error('Email already registered');
+          toast.error('Email already registered. Please login instead.');
         } else {
-          toast.error(authError.message);
+          toast.error(`Signup failed: ${authError.message}`);
         }
+        setIsLoading(false);
         return;
       }
       
       if (!authData.user) {
-        toast.error('Signup failed');
+        toast.error('Signup failed: No user created');
+        setIsLoading(false);
         return;
       }
+
+      console.log('Auth user created:', authData.user.id);
       
       // Create user profile
-      const { error: insertError } = await supabase.from('users').insert({
+      const userProfile = {
         auth_user_id: authData.user.id,
         email: studentEmail,
         role: 'student',
@@ -262,16 +319,42 @@ export default function AuthPage() {
         profile_picture: generateAvatar(gender, studentEmail),
         phone_number: phoneNumber,
         points: 0,
-      });
+      };
+
+      console.log('Inserting user profile:', userProfile);
+
+      const { data: insertData, error: insertError } = await supabase
+        .from('users')
+        .insert(userProfile)
+        .select();
+      
+      console.log('User profile insert result:', { insertData, insertError });
       
       if (insertError) {
         console.error('Insert error:', insertError);
-        toast.error('Failed to create user profile');
+        toast.error(`Failed to create profile: ${insertError.message}`);
+        setIsLoading(false);
         return;
       }
       
-      toast.success('Student account created successfully!');
-      router.push('/dashboard');
+      toast.success('Student account created successfully! You can now login.');
+      
+      // Switch to login tab
+      setAuthMode('login');
+      setLoginEmail(studentEmail);
+      
+      // Clear signup form
+      setStudentName('');
+      setStudentEmail('');
+      setStudentPassword('');
+      setBranch('');
+      setRollNumber('');
+      setSemester('');
+      setYear('');
+      setPhoneNumber('');
+      setDobInput('');
+      setDob(undefined);
+      
     } catch (error: any) {
       console.error('Signup error:', error);
       toast.error(error.message || 'Signup failed');
@@ -285,17 +368,29 @@ export default function AuthPage() {
     setIsLoading(true);
     
     try {
+      console.log('Starting technical signup...');
+      
       // Validation
       if (!techName || !techEmail || !techPassword || !techPhone || !department) {
         toast.error('Please fill in all required fields');
+        setIsLoading(false);
         return;
       }
+
+      if (techPassword.length < 6) {
+        toast.error('Password must be at least 6 characters');
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log('Creating auth user for technical:', techEmail);
       
       // Create auth user
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: techEmail,
         password: techPassword,
         options: {
+          emailRedirectTo: undefined,
           data: {
             name: techName,
             role: 'technical',
@@ -303,19 +398,26 @@ export default function AuthPage() {
         },
       });
       
+      console.log('Auth signup result:', { authData, authError });
+      
       if (authError) {
+        console.error('Auth error:', authError);
         if (authError.message.includes('already registered')) {
-          toast.error('Email already registered');
+          toast.error('Email already registered. Please login instead.');
         } else {
-          toast.error(authError.message);
+          toast.error(`Signup failed: ${authError.message}`);
         }
+        setIsLoading(false);
         return;
       }
       
       if (!authData.user) {
-        toast.error('Signup failed');
+        toast.error('Signup failed: No user created');
+        setIsLoading(false);
         return;
       }
+
+      console.log('Auth user created:', authData.user.id);
       
       // Create user profile
       const { data: userData, error: insertError } = await supabase.from('users').insert({
@@ -329,11 +431,16 @@ export default function AuthPage() {
         points: 0,
       }).select().single();
       
+      console.log('User profile insert result:', { userData, insertError });
+      
       if (insertError) {
         console.error('Insert error:', insertError);
-        toast.error('Failed to create user profile');
+        toast.error(`Failed to create profile: ${insertError.message}`);
+        setIsLoading(false);
         return;
       }
+      
+      console.log('Creating technical team entry...');
       
       // Add to technical team table
       const { error: techError } = await supabase.from('technical_team').insert({
@@ -345,12 +452,25 @@ export default function AuthPage() {
         available: true,
       });
       
+      console.log('Technical team insert result:', techError);
+      
       if (techError) {
         console.error('Technical team insert error:', techError);
       }
       
-      toast.success('Technical team account created successfully!');
-      router.push('/technical/dashboard');
+      toast.success('Technical team account created successfully! You can now login.');
+      
+      // Switch to login tab
+      setAuthMode('login');
+      setLoginEmail(techEmail);
+      
+      // Clear signup form
+      setTechName('');
+      setTechEmail('');
+      setTechPassword('');
+      setTechPhone('');
+      setDepartment('');
+      
     } catch (error: any) {
       console.error('Signup error:', error);
       toast.error(error.message || 'Signup failed');
@@ -450,7 +570,7 @@ export default function AuthPage() {
                     
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="studentPassword">Password *</Label>
+                        <Label htmlFor="studentPassword">Password * (min 6 characters)</Label>
                         <Input
                           id="studentPassword"
                           type="password"
@@ -458,6 +578,7 @@ export default function AuthPage() {
                           onChange={(e) => setStudentPassword(e.target.value)}
                           required
                           disabled={isLoading}
+                          minLength={6}
                         />
                       </div>
                       <div className="space-y-2">
@@ -583,7 +704,7 @@ export default function AuthPage() {
                     </div>
                     
                     <div className="space-y-2">
-                      <Label htmlFor="techPassword">Password *</Label>
+                      <Label htmlFor="techPassword">Password * (min 6 characters)</Label>
                       <Input
                         id="techPassword"
                         type="password"
@@ -591,6 +712,7 @@ export default function AuthPage() {
                         onChange={(e) => setTechPassword(e.target.value)}
                         required
                         disabled={isLoading}
+                        minLength={6}
                       />
                     </div>
                     
