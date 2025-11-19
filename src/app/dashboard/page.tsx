@@ -97,7 +97,38 @@ export default function Dashboard() {
   const handleSubmitComplaint = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!user || !title || !category || !difficulty || !fixTillDate || submittingComplaint) {
+    if (!user) {
+      toast.error('User not found');
+      return;
+    }
+
+    // Validate all required fields
+    if (!title || title.trim().length === 0) {
+      toast.error('Please enter a title');
+      return;
+    }
+
+    if (!description || description.trim().length === 0) {
+      toast.error('Please enter a description');
+      return;
+    }
+
+    if (!category) {
+      toast.error('Please select a category');
+      return;
+    }
+
+    if (!difficulty) {
+      toast.error('Please select a difficulty level');
+      return;
+    }
+
+    if (!fixTillDate) {
+      toast.error('Please select a fix till date');
+      return;
+    }
+
+    if (submittingComplaint) {
       return;
     }
 
@@ -114,7 +145,7 @@ export default function Dashboard() {
           emergency,
           fixTillDate: format(fixTillDate, 'yyyy-MM-dd'),
           photo: photo.trim() || undefined,
-          raisedBy: user.id,
+          raisedBy: typeof user.id === 'number' ? user.id : parseInt(user.id),
           raisedByName: user.name,
           raisedByBranch: user.branch,
           raisedByProfilePic: user.profilePicture,
@@ -132,7 +163,7 @@ export default function Dashboard() {
         setFixTillDate(undefined);
         setPhoto('');
         setDialogOpen(false);
-        loadData(user.id);
+        loadData(typeof user.id === 'number' ? user.id : parseInt(user.id));
       } else {
         const error = await res.json();
         toast.error(error.error || 'Failed to submit complaint');
