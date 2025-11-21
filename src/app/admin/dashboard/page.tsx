@@ -9,12 +9,14 @@ import { User, Complaint, TechnicalTeamMember } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
-import { Trash2, MessageSquare, Send, Trophy } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Trash2, MessageSquare, Send, Trophy, UserPlus, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
@@ -37,6 +39,37 @@ export default function AdminDashboard() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [complaintToDelete, setComplaintToDelete] = useState<number | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Add student dialog state
+  const [addStudentDialogOpen, setAddStudentDialogOpen] = useState(false);
+  const [studentForm, setStudentForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    branch: '',
+    rollNumber: '',
+    semester: '',
+    year: '',
+    gender: 'male' as 'male' | 'female' | 'other',
+    phoneNumber: '',
+  });
+  const [addingStudent, setAddingStudent] = useState(false);
+
+  // Add technical team dialog state
+  const [addTechDialogOpen, setAddTechDialogOpen] = useState(false);
+  const [techForm, setTechForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    department: '',
+    phoneNumber: '',
+  });
+  const [addingTech, setAddingTech] = useState(false);
+
+  // Delete student/tech dialog
+  const [deleteUserDialogOpen, setDeleteUserDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<{ id: string; type: 'student' | 'tech'; name: string } | null>(null);
+  const [deletingUser, setDeletingUser] = useState(false);
 
   useEffect(() => {
     const currentUser = getCurrentUser();
@@ -194,6 +227,186 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleAddStudent = async () => {
+    if (addingStudent) return;
+
+    // Validate form
+    if (!studentForm.name || !studentForm.email || !studentForm.password) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    setAddingStudent(true);
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...studentForm,
+          role: 'student',
+          profilePicture: studentForm.gender === 'male' 
+            ? 'https://api.dicebear.com/7.x/avataaars/svg?seed=male'
+            : studentForm.gender === 'female'
+            ? 'https://api.dicebear.com/7.x/avataaars/svg?seed=female'
+            : 'https://api.dicebear.com/7.x/avataaars/svg?seed=other',
+        }),
+      });
+
+      if (res.ok) {
+        toast.success('Student added successfully');
+        setAddStudentDialogOpen(false);
+        setStudentForm({
+          name: '',
+          email: '',
+          password: '',
+          branch: '',
+          rollNumber: '',
+          semester: '',
+          year: '',
+          gender: 'male',
+          phoneNumber: '',
+        });
+        loadData();
+      } else {
+        const error = await res.json();
+        toast.error(error.error || 'Failed to add student');
+      }
+    } catch (error) {
+      console.error('Error adding student:', error);
+      toast.error('Failed to add student');
+    } finally {
+      setAddingStudent(false);
+    }
+  };
+
+  const handleAddTechnicalMember = async () => {
+    if (addingTech) return;
+
+    // Validate form
+    if (!techForm.name || !techForm.email || !techForm.password || !techForm.department || !techForm.phoneNumber) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    setAddingTech(true);
+    try {
+      // First, create user account
+      const userRes = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: techForm.name,
+          email: techForm.email,
+          password: techForm.password,
+          role: 'technical',
+          department: techForm.department,
+          phoneNumber: techForm.phoneNumber,
+        }),
+      });
+
+      if (!userRes.ok) {
+        const error = await userRes.json();
+        toast.error(error.error || 'Failed to create user account');
+        setAddingTech(false);
+        return;
+      }
+
+      const newUser = await userRes.json();
+
+      // Then, add to technical team table
+      const techRes = await fetch('/api/technical-team', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: newUser.id,
+          name: techForm.name,
+          department: techForm.department,
+          email: techForm.email,
+          phoneNumber: techForm.phoneNumber,
+          available: true,
+        }),
+      });
+
+      if (techRes.ok) {
+        toast.success('Technical team member added successfully');
+        setAddTechDialogOpen(false);
+        setTechForm({
+          name: '',
+          email: '',
+          password: '',
+          department: '',
+          phoneNumber: '',
+        });
+        loadData();
+      } else {
+        const error = await techRes.json();
+        toast.error(error.error || 'Failed to add to technical team');
+      }
+    } catch (error) {
+      console.error('Error adding technical member:', error);
+      toast.error('Failed to add technical member');
+    } finally {
+      setAddingTech(false);
+    }
+  };
+
+  const handleDeleteUser = (id: string, type: 'student' | 'tech', name: string) => {
+    setUserToDelete({ id, type, name });
+    setDeleteUserDialogOpen(true);
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!userToDelete || deletingUser) return;
+
+    setDeletingUser(true);
+    try {
+      if (userToDelete.type === 'tech') {
+        // Delete from technical team table first
+        const techRes = await fetch(`/api/technical-team?id=${userToDelete.id}`, {
+          method: 'DELETE',
+        });
+
+        if (!techRes.ok) {
+          const error = await techRes.json();
+          toast.error(error.error || 'Failed to delete technical team member');
+          setDeletingUser(false);
+          return;
+        }
+
+        // Get the technical team member to find userId
+        const techMember = technicalTeam.find(m => m.id === parseInt(userToDelete.id));
+        if (techMember) {
+          // Delete user account
+          await fetch(`/api/users?id=${techMember.userId}`, {
+            method: 'DELETE',
+          });
+        }
+      } else {
+        // Delete student user account
+        const res = await fetch(`/api/users?id=${userToDelete.id}`, {
+          method: 'DELETE',
+        });
+
+        if (!res.ok) {
+          const error = await res.json();
+          toast.error(error.error || 'Failed to delete student');
+          setDeletingUser(false);
+          return;
+        }
+      }
+
+      toast.success(`${userToDelete.type === 'tech' ? 'Technical team member' : 'Student'} deleted successfully`);
+      setDeleteUserDialogOpen(false);
+      setUserToDelete(null);
+      loadData();
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      toast.error('Failed to delete user');
+    } finally {
+      setDeletingUser(false);
+    }
+  };
+
   const tabs = [
     { id: 'complaints', label: 'Complaints' },
     { id: 'technical', label: 'Technical Team' },
@@ -329,9 +542,15 @@ export default function AdminDashboard() {
 
               {activeTab === 'technical' && (
                 <div className="space-y-6">
-                  <div>
-                    <h1 className="text-3xl font-bold text-gray-900">Technical Team</h1>
-                    <p className="text-gray-600 mt-1">Manage technical team availability</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h1 className="text-3xl font-bold text-gray-900">Technical Team</h1>
+                      <p className="text-gray-600 mt-1">Manage technical team members and availability</p>
+                    </div>
+                    <Button onClick={() => setAddTechDialogOpen(true)}>
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Add Member
+                    </Button>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -354,7 +573,7 @@ export default function AdminDashboard() {
                   <Card>
                     <CardHeader>
                       <CardTitle>Team Members</CardTitle>
-                      <CardDescription>Manage availability status</CardDescription>
+                      <CardDescription>Manage availability status and members</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-4">
@@ -391,6 +610,13 @@ export default function AdminDashboard() {
                                   checked={member.available}
                                   onCheckedChange={() => handleToggleAvailability(member.id, member.available)}
                                 />
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => handleDeleteUser(member.id.toString(), 'tech', member.name)}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
                               </div>
                             </div>
                           ))
@@ -403,9 +629,15 @@ export default function AdminDashboard() {
 
               {activeTab === 'students' && (
                 <div className="space-y-6">
-                  <div>
-                    <h1 className="text-3xl font-bold text-gray-900">Student Registry</h1>
-                    <p className="text-gray-600 mt-1">View all registered students and their points</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h1 className="text-3xl font-bold text-gray-900">Student Registry</h1>
+                      <p className="text-gray-600 mt-1">View and manage registered students</p>
+                    </div>
+                    <Button onClick={() => setAddStudentDialogOpen(true)}>
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Add Student
+                    </Button>
                   </div>
 
                   <Card>
@@ -459,6 +691,13 @@ export default function AdminDashboard() {
                                   >
                                     <MessageSquare className="h-4 w-4 mr-1" />
                                     Message
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => handleDeleteUser(student.id, 'student', student.name)}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
                                   </Button>
                                 </div>
                               </div>
@@ -521,6 +760,220 @@ export default function AdminDashboard() {
               </Button>
               <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
                 {deleting ? 'Deleting...' : 'Delete'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Student Dialog */}
+        <Dialog open={addStudentDialogOpen} onOpenChange={setAddStudentDialogOpen}>
+          <DialogContent className="max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Add New Student</DialogTitle>
+              <DialogDescription>
+                Add a new student to the system
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="student-name">Name *</Label>
+                <Input
+                  id="student-name"
+                  value={studentForm.name}
+                  onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })}
+                  placeholder="Enter student name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="student-email">Email *</Label>
+                <Input
+                  id="student-email"
+                  type="email"
+                  value={studentForm.email}
+                  onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
+                  placeholder="student@example.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="student-password">Password *</Label>
+                <Input
+                  id="student-password"
+                  type="password"
+                  value={studentForm.password}
+                  onChange={(e) => setStudentForm({ ...studentForm, password: e.target.value })}
+                  placeholder="Enter password"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="student-branch">Branch</Label>
+                  <Input
+                    id="student-branch"
+                    value={studentForm.branch}
+                    onChange={(e) => setStudentForm({ ...studentForm, branch: e.target.value })}
+                    placeholder="e.g., CSE"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="student-roll">Roll Number</Label>
+                  <Input
+                    id="student-roll"
+                    value={studentForm.rollNumber}
+                    onChange={(e) => setStudentForm({ ...studentForm, rollNumber: e.target.value })}
+                    placeholder="e.g., 2021001"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="student-semester">Semester</Label>
+                  <Input
+                    id="student-semester"
+                    value={studentForm.semester}
+                    onChange={(e) => setStudentForm({ ...studentForm, semester: e.target.value })}
+                    placeholder="e.g., 6"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="student-year">Year</Label>
+                  <Input
+                    id="student-year"
+                    value={studentForm.year}
+                    onChange={(e) => setStudentForm({ ...studentForm, year: e.target.value })}
+                    placeholder="e.g., 2024"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="student-gender">Gender</Label>
+                <Select
+                  value={studentForm.gender}
+                  onValueChange={(value: 'male' | 'female' | 'other') => setStudentForm({ ...studentForm, gender: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="student-phone">Phone Number</Label>
+                <Input
+                  id="student-phone"
+                  value={studentForm.phoneNumber}
+                  onChange={(e) => setStudentForm({ ...studentForm, phoneNumber: e.target.value })}
+                  placeholder="e.g., +91 9876543210"
+                />
+              </div>
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button variant="outline" onClick={() => setAddStudentDialogOpen(false)} disabled={addingStudent}>
+                  Cancel
+                </Button>
+                <Button onClick={handleAddStudent} disabled={addingStudent}>
+                  {addingStudent ? 'Adding...' : 'Add Student'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Add Technical Team Member Dialog */}
+        <Dialog open={addTechDialogOpen} onOpenChange={setAddTechDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add Technical Team Member</DialogTitle>
+              <DialogDescription>
+                Add a new member to the technical team
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="tech-name">Name *</Label>
+                <Input
+                  id="tech-name"
+                  value={techForm.name}
+                  onChange={(e) => setTechForm({ ...techForm, name: e.target.value })}
+                  placeholder="Enter name"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="tech-email">Email *</Label>
+                <Input
+                  id="tech-email"
+                  type="email"
+                  value={techForm.email}
+                  onChange={(e) => setTechForm({ ...techForm, email: e.target.value })}
+                  placeholder="tech@example.com"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="tech-password">Password *</Label>
+                <Input
+                  id="tech-password"
+                  type="password"
+                  value={techForm.password}
+                  onChange={(e) => setTechForm({ ...techForm, password: e.target.value })}
+                  placeholder="Enter password"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="tech-department">Department *</Label>
+                <Select
+                  value={techForm.department}
+                  onValueChange={(value) => setTechForm({ ...techForm, department: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="electrical">Electrical</SelectItem>
+                    <SelectItem value="mechanical">Mechanical</SelectItem>
+                    <SelectItem value="networking">Networking</SelectItem>
+                    <SelectItem value="plumbing">Plumbing</SelectItem>
+                    <SelectItem value="civil">Civil</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="tech-phone">Phone Number *</Label>
+                <Input
+                  id="tech-phone"
+                  value={techForm.phoneNumber}
+                  onChange={(e) => setTechForm({ ...techForm, phoneNumber: e.target.value })}
+                  placeholder="e.g., +91 9876543210"
+                />
+              </div>
+              <div className="flex justify-end space-x-2 pt-4">
+                <Button variant="outline" onClick={() => setAddTechDialogOpen(false)} disabled={addingTech}>
+                  Cancel
+                </Button>
+                <Button onClick={handleAddTechnicalMember} disabled={addingTech}>
+                  {addingTech ? 'Adding...' : 'Add Member'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete User Confirmation Dialog */}
+        <Dialog open={deleteUserDialogOpen} onOpenChange={setDeleteUserDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete {userToDelete?.type === 'tech' ? 'Technical Team Member' : 'Student'}</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete {userToDelete?.name}? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="flex justify-end space-x-2 pt-4">
+              <Button variant="outline" onClick={() => setDeleteUserDialogOpen(false)} disabled={deletingUser}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={confirmDeleteUser} disabled={deletingUser}>
+                {deletingUser ? 'Deleting...' : 'Delete'}
               </Button>
             </div>
           </DialogContent>
