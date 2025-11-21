@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, User, LogOut, Menu } from 'lucide-react';
+import { Bell, User, LogOut, Menu, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -52,12 +52,19 @@ export default function Navbar({ activeTab, onTabChange, tabs = [] }: NavbarProp
     router.push('/profile');
   };
 
+  const handleHome = () => {
+    router.push('/');
+  };
+
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          {/* Logo */}
-          <div className="flex items-center space-x-3">
+          {/* Logo - Now Clickable */}
+          <button 
+            onClick={handleHome}
+            className="flex items-center space-x-3 hover:opacity-80 transition-opacity"
+          >
             <Image
               src="https://slelguoygbfzlpylpxfs.supabase.co/storage/v1/object/public/document-uploads/favicon-1762096162206.ico"
               alt="Sahayata"
@@ -66,7 +73,7 @@ export default function Navbar({ activeTab, onTabChange, tabs = [] }: NavbarProp
               className="rounded-full"
             />
             <span className="text-xl font-bold text-gray-900">Sahayata</span>
-          </div>
+          </button>
 
           {/* Desktop Navigation */}
           {tabs.length > 0 && (
@@ -89,6 +96,17 @@ export default function Navbar({ activeTab, onTabChange, tabs = [] }: NavbarProp
 
           {/* Right Section */}
           <div className="flex items-center space-x-4">
+            {/* Home Button - Visible on mobile */}
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={handleHome}
+              className="md:hidden"
+              title="Go to Home"
+            >
+              <Home className="h-5 w-5" />
+            </Button>
+
             {/* Notifications */}
             <Link href="/notifications" className="relative">
               <Button variant="ghost" size="icon">
@@ -127,6 +145,10 @@ export default function Navbar({ activeTab, onTabChange, tabs = [] }: NavbarProp
                   </div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleHome}>
+                  <Home className="mr-2 h-4 w-4" />
+                  Home
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleProfile}>
                   <User className="mr-2 h-4 w-4" />
                   Profile
