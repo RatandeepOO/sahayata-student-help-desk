@@ -27,7 +27,7 @@ const TypeWriter = ({ text }: { text: string }) => {
       const timeout = setTimeout(() => {
         setDisplayText(prev => prev + text[currentIndex]);
         setCurrentIndex(prev => prev + 1);
-      }, 150);
+      }, 100);
       return () => clearTimeout(timeout);
     }
   }, [currentIndex, text]);
@@ -52,7 +52,7 @@ const ParticleEffect = ({ trigger }: { trigger: boolean }) => {
       }));
       setParticles(newParticles);
       
-      setTimeout(() => setParticles([]), 1000);
+      setTimeout(() => setParticles([]), 1500);
     }
   }, [trigger]);
 
@@ -68,7 +68,7 @@ const ParticleEffect = ({ trigger }: { trigger: boolean }) => {
             opacity: 0,
             scale: 0
           }}
-          transition={{ duration: 0.8, ease: 'easeOut' }}
+          transition={{ duration: 1.2, ease: 'easeOut' }}
           className="absolute w-2 h-2 bg-blue-500 rounded-full"
         />
       ))}
@@ -81,25 +81,27 @@ const FeatureCard = ({ icon: Icon, title, description, delay }: any) => {
     <motion.div
       initial={{ opacity: 0, y: 50 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.5, delay }}
+      viewport={{ once: true, margin: "-100px" }}
+      transition={{ duration: 0.8, delay, ease: 'easeOut' }}
     >
-      <Card className="p-6 hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 bg-white/80 backdrop-blur border-2 hover:border-blue-400 group">
+      <Card className="p-6 hover:shadow-2xl transition-all duration-500 ease-out hover:-translate-y-2 bg-white/80 backdrop-blur border-2 hover:border-blue-400 group">
         <motion.div
           whileHover={{ scale: 1.1, rotate: 5 }}
-          transition={{ type: 'spring', stiffness: 300 }}
+          transition={{ type: 'spring', stiffness: 200, damping: 15 }}
         >
-          <Icon className="w-12 h-12 mb-4 text-blue-600 group-hover:text-green-600 transition-colors" />
+          <Icon className="w-12 h-12 mb-4 text-blue-600 group-hover:text-green-600 transition-colors duration-500" />
         </motion.div>
         <motion.h3 
-          className="text-xl font-bold mb-2 group-hover:text-blue-600 transition-colors"
+          className="text-xl font-bold mb-2 group-hover:text-blue-600 transition-colors duration-500"
           whileHover={{ scale: 1.05 }}
+          transition={{ duration: 0.3, ease: 'easeInOut' }}
         >
           {title}
         </motion.h3>
         <motion.p 
-          className="text-gray-600 group-hover:text-gray-800 transition-colors"
+          className="text-gray-600 group-hover:text-gray-800 transition-colors duration-500"
           whileHover={{ scale: 1.02 }}
+          transition={{ duration: 0.3, ease: 'easeInOut' }}
         >
           {description}
         </motion.p>
@@ -115,8 +117,8 @@ export default function Home() {
   const { scrollY } = useScroll();
   const heroRef = useRef(null);
 
-  const opacity = useTransform(scrollY, [0, 300], [1, 0]);
-  const scale = useTransform(scrollY, [0, 300], [1, 0.8]);
+  const opacity = useTransform(scrollY, [0, 400], [1, 0]);
+  const scale = useTransform(scrollY, [0, 400], [1, 0.9]);
 
   useEffect(() => {
     const user = getCurrentUser();
@@ -218,9 +220,9 @@ export default function Home() {
               rotate: [0, 180, 360],
             }}
             transition={{
-              duration: 20,
+              duration: 30,
               repeat: Infinity,
-              ease: 'linear',
+              ease: 'easeInOut',
             }}
             className="absolute top-20 left-20 w-64 h-64 bg-blue-200 rounded-full opacity-20 blur-3xl"
           />
@@ -230,9 +232,9 @@ export default function Home() {
               rotate: [360, 180, 0],
             }}
             transition={{
-              duration: 25,
+              duration: 35,
               repeat: Infinity,
-              ease: 'linear',
+              ease: 'easeInOut',
             }}
             className="absolute bottom-20 right-20 w-96 h-96 bg-green-200 rounded-full opacity-20 blur-3xl"
           />
@@ -241,14 +243,14 @@ export default function Home() {
         <motion.div
           initial={{ opacity: 0, y: -50 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1, ease: 'easeOut' }}
+          transition={{ duration: 1.2, ease: 'easeOut' }}
           className="text-center z-10"
         >
           {/* Logo */}
           <motion.div
             initial={{ scale: 0, rotate: -180 }}
             animate={{ scale: 1, rotate: 0 }}
-            transition={{ duration: 0.8, type: 'spring', stiffness: 200 }}
+            transition={{ duration: 1, type: 'spring', stiffness: 150, damping: 20 }}
             className="flex items-center justify-center mb-8"
           >
             <Image 
@@ -264,7 +266,7 @@ export default function Home() {
           <motion.h1
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.8, delay: 0.3 }}
+            transition={{ duration: 1, delay: 0.3, ease: 'easeInOut' }}
             className="text-5xl md:text-7xl font-bold mb-4 text-gray-800"
           >
             Getting started with
@@ -276,7 +278,7 @@ export default function Home() {
           <motion.p
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ duration: 0.8, delay: 1.5 }}
+            transition={{ duration: 1, delay: 1.5, ease: 'easeInOut' }}
             className="text-xl md:text-2xl text-gray-600 mb-12 max-w-2xl mx-auto"
           >
             Your Campus Help Desk Solution - Report Issues, Volunteer, and Make a Difference
@@ -286,24 +288,32 @@ export default function Home() {
           <motion.div
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8, delay: 2 }}
+            transition={{ duration: 1, delay: 2, ease: 'easeOut' }}
             className="flex flex-col sm:flex-row gap-4 justify-center items-center"
           >
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <motion.div 
+              whileHover={{ scale: 1.05 }} 
+              whileTap={{ scale: 0.95 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+            >
               <Button
                 size="lg"
                 onClick={() => router.push('/auth')}
-                className="text-lg px-8 py-6 bg-blue-600 hover:bg-blue-700 shadow-xl hover:shadow-2xl transition-all"
+                className="text-lg px-8 py-6 bg-blue-600 hover:bg-blue-700 shadow-xl hover:shadow-2xl transition-all duration-500"
               >
                 Login
               </Button>
             </motion.div>
-            <motion.div whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}>
+            <motion.div 
+              whileHover={{ scale: 1.05 }} 
+              whileTap={{ scale: 0.95 }}
+              transition={{ duration: 0.3, ease: 'easeInOut' }}
+            >
               <Button
                 size="lg"
                 variant="outline"
                 onClick={() => router.push('/info')}
-                className="text-lg px-8 py-6 border-2 border-blue-600 hover:bg-blue-50 shadow-xl hover:shadow-2xl transition-all"
+                className="text-lg px-8 py-6 border-2 border-blue-600 hover:bg-blue-50 shadow-xl hover:shadow-2xl transition-all duration-500"
               >
                 Info Page
               </Button>
@@ -315,12 +325,12 @@ export default function Home() {
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 1, delay: 2.5 }}
+          transition={{ duration: 1, delay: 2.5, ease: 'easeInOut' }}
           className="absolute bottom-8"
         >
           <motion.div
             animate={{ y: [0, 10, 0] }}
-            transition={{ duration: 1.5, repeat: Infinity }}
+            transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
             className="text-gray-400 flex flex-col items-center"
           >
             <span className="text-sm mb-2">Scroll to explore</span>
@@ -346,14 +356,15 @@ export default function Home() {
         <motion.div
           initial={{ opacity: 0 }}
           whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.8 }}
+          viewport={{ once: true, margin: "-100px" }}
+          transition={{ duration: 1, ease: 'easeInOut' }}
           className="max-w-7xl mx-auto"
         >
           <motion.h2
             initial={{ opacity: 0, y: 50 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ duration: 0.8, ease: 'easeOut' }}
             className="text-4xl md:text-5xl font-bold text-center mb-4 text-gray-800"
           >
             Why Choose Sahayata?
@@ -361,8 +372,8 @@ export default function Home() {
           <motion.p
             initial={{ opacity: 0, y: 30 }}
             whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.2 }}
+            viewport={{ once: true, margin: "-100px" }}
+            transition={{ delay: 0.2, duration: 0.8, ease: 'easeOut' }}
             className="text-xl text-gray-600 text-center mb-16 max-w-3xl mx-auto"
           >
             A comprehensive platform designed to streamline campus issue management and foster community collaboration
@@ -386,18 +397,21 @@ export default function Home() {
       <motion.footer
         initial={{ opacity: 0 }}
         whileInView={{ opacity: 1 }}
-        viewport={{ once: true }}
+        viewport={{ once: true, margin: "-50px" }}
+        transition={{ duration: 1, ease: 'easeInOut' }}
         className="py-12 px-4 bg-gradient-to-r from-blue-600 to-green-600 text-white relative overflow-hidden"
       >
         <div className="absolute inset-0 bg-black opacity-10"></div>
         <motion.div
           initial={{ y: 50 }}
           whileInView={{ y: 0 }}
-          viewport={{ once: true }}
+          viewport={{ once: true, margin: "-50px" }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
           className="max-w-7xl mx-auto text-center relative z-10"
         >
           <motion.div
             whileHover={{ scale: 1.05 }}
+            transition={{ duration: 0.3, ease: 'easeInOut' }}
             className="mb-4"
           >
             <p className="text-lg font-semibold mb-2">Licensed by</p>
@@ -407,7 +421,7 @@ export default function Home() {
             initial={{ opacity: 0 }}
             whileInView={{ opacity: 1 }}
             viewport={{ once: true }}
-            transition={{ delay: 0.3 }}
+            transition={{ delay: 0.3, duration: 0.8, ease: 'easeInOut' }}
             className="text-sm opacity-90 mt-4"
           >
             © {new Date().getFullYear()} Sahayata. All rights reserved.
