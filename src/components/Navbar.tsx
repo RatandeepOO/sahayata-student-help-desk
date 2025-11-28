@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bell, User, LogOut, Menu, Home } from 'lucide-react';
+import { Bell, User, LogOut, Menu, Home, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -56,6 +56,10 @@ export default function Navbar({ activeTab, onTabChange, tabs = [] }: NavbarProp
     router.push('/');
   };
 
+  const handleMessages = () => {
+    router.push('/messages');
+  };
+
   return (
     <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -107,6 +111,16 @@ export default function Navbar({ activeTab, onTabChange, tabs = [] }: NavbarProp
               <Home className="h-5 w-5" />
             </Button>
 
+            {/* Messages Button */}
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={handleMessages}
+              title="Messages"
+            >
+              <MessageSquare className="h-5 w-5" />
+            </Button>
+
             {/* Notifications */}
             <Link href="/notifications" className="relative">
               <Button variant="ghost" size="icon">
@@ -148,6 +162,10 @@ export default function Navbar({ activeTab, onTabChange, tabs = [] }: NavbarProp
                 <DropdownMenuItem onClick={handleHome}>
                   <Home className="mr-2 h-4 w-4" />
                   Home
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleMessages}>
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  Messages
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={handleProfile}>
                   <User className="mr-2 h-4 w-4" />

@@ -79,7 +79,7 @@ export default function InfoPage() {
         setDirection(1);
         setCurrentSlide((prev) => prev + 1);
       }
-    }, 4000);
+    }, 2400);
 
     return () => clearInterval(timer);
   }, [currentSlide, autoPlay, router]);

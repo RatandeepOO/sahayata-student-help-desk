@@ -31,7 +31,7 @@ export default function AdminDashboard() {
   
   // Message dialog state
   const [messageDialogOpen, setMessageDialogOpen] = useState(false);
-  const [selectedStudent, setSelectedStudent] = useState<User | null>(null);
+  const [selectedRecipient, setSelectedRecipient] = useState<{ id: number; name: string; type: 'student' | 'tech' } | null>(null);
   const [messageContent, setMessageContent] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
 
@@ -164,13 +164,13 @@ export default function AdminDashboard() {
     }
   };
 
-  const openMessageDialog = (student: User) => {
-    setSelectedStudent(student);
+  const openMessageDialog = (recipientId: number, recipientName: string, type: 'student' | 'tech') => {
+    setSelectedRecipient({ id: recipientId, name: recipientName, type });
     setMessageDialogOpen(true);
   };
 
   const handleSendMessage = async () => {
-    if (!user || !selectedStudent || !messageContent.trim() || sendingMessage) return;
+    if (!user || !selectedRecipient || !messageContent.trim() || sendingMessage) return;
 
     setSendingMessage(true);
     try {
@@ -181,7 +181,7 @@ export default function AdminDashboard() {
         body: JSON.stringify({
           senderId: user.id,
           senderName: user.name,
-          receiverId: selectedStudent.id,
+          receiverId: selectedRecipient.id,
           content: messageContent.trim(),
         }),
       });
@@ -197,7 +197,7 @@ export default function AdminDashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          userId: selectedStudent.id,
+          userId: selectedRecipient.id,
           type: 'new_message',
           message: `New message from Admin: ${messageContent.substring(0, 50)}${messageContent.length > 50 ? '...' : ''}`,
         }),
@@ -206,6 +206,9 @@ export default function AdminDashboard() {
       toast.success('Message sent successfully');
       setMessageContent('');
       setMessageDialogOpen(false);
+      
+      // Redirect to messages page to continue conversation
+      router.push('/messages');
     } catch (error) {
       console.error('Error sending message:', error);
       toast.error('Failed to send message');
@@ -230,7 +233,7 @@ export default function AdminDashboard() {
   const handleAddStudent = async () => {
     if (addingStudent) return;
 
-    // Validate form
+    // Validation
     if (!studentForm.name || !studentForm.email || !studentForm.password) {
       toast.error('Please fill in all required fields');
       return;
@@ -282,7 +285,7 @@ export default function AdminDashboard() {
   const handleAddTechnicalMember = async () => {
     if (addingTech) return;
 
-    // Validate form
+    // Validation
     if (!techForm.name || !techForm.email || !techForm.password || !techForm.department || !techForm.phoneNumber) {
       toast.error('Please fill in all required fields');
       return;
@@ -612,6 +615,13 @@ export default function AdminDashboard() {
                                 />
                                 <Button
                                   size="sm"
+                                  variant="outline"
+                                  onClick={() => openMessageDialog(member.userId || member.id, member.name, 'tech')}
+                                >
+                                  <MessageSquare className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
                                   variant="destructive"
                                   onClick={() => handleDeleteUser(member.id.toString(), 'tech', member.name)}
                                 >
@@ -687,7 +697,7 @@ export default function AdminDashboard() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => openMessageDialog(student)}
+                                    onClick={() => openMessageDialog(student.id, student.name, 'student')}
                                   >
                                     <MessageSquare className="h-4 w-4 mr-1" />
                                     Message
@@ -695,7 +705,7 @@ export default function AdminDashboard() {
                                   <Button
                                     size="sm"
                                     variant="destructive"
-                                    onClick={() => handleDeleteUser(student.id, 'student', student.name)}
+                                    onClick={() => handleDeleteUser(student.id.toString(), 'student', student.name)}
                                   >
                                     <Trash2 className="h-4 w-4" />
                                   </Button>
@@ -716,9 +726,9 @@ export default function AdminDashboard() {
         <Dialog open={messageDialogOpen} onOpenChange={setMessageDialogOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Send Message to {selectedStudent?.name}</DialogTitle>
+              <DialogTitle>Send Message to {selectedRecipient?.name}</DialogTitle>
               <DialogDescription>
-                Send a direct message to this student
+                Send a direct message to this {selectedRecipient?.type === 'student' ? 'student' : 'technical team member'}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">

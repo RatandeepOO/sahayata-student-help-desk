@@ -10,7 +10,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { AlertCircle, CheckCircle2, Clock, ArrowRight } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { AlertCircle, CheckCircle2, Clock, ArrowRight, MessageSquare, Send } from 'lucide-react';
 import { format } from 'date-fns';
 import { getPointsForDifficulty } from '@/lib/avatar';
 import { toast } from 'sonner';
@@ -21,6 +24,12 @@ export default function TechnicalDashboard() {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [myComplaints, setMyComplaints] = useState<Complaint[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Message dialog state
+  const [messageDialogOpen, setMessageDialogOpen] = useState(false);
+  const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
+  const [messageContent, setMessageContent] = useState('');
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   useEffect(() => {
     const currentUser = getCurrentUser();
@@ -190,6 +199,61 @@ export default function TechnicalDashboard() {
     }
   };
 
+  const openMessageDialog = (complaint: Complaint) => {
+    setSelectedComplaint(complaint);
+    setMessageDialogOpen(true);
+  };
+
+  const handleSendMessage = async () => {
+    if (!user || !selectedComplaint || !messageContent.trim() || sendingMessage) return;
+
+    setSendingMessage(true);
+    try {
+      // Send message
+      const messageRes = await fetch('/api/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          senderId: user.id,
+          senderName: user.name,
+          receiverId: selectedComplaint.raisedBy,
+          content: messageContent.trim(),
+          complaintId: selectedComplaint.id,
+        }),
+      });
+
+      if (!messageRes.ok) {
+        const error = await messageRes.json();
+        toast.error(error.error || 'Failed to send message');
+        return;
+      }
+
+      // Send notification
+      await fetch('/api/notifications', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: selectedComplaint.raisedBy,
+          type: 'new_message',
+          message: `New message from ${user.name} about complaint "${selectedComplaint.title}": ${messageContent.substring(0, 50)}${messageContent.length > 50 ? '...' : ''}`,
+          complaintId: selectedComplaint.id,
+        }),
+      });
+
+      toast.success('Message sent successfully');
+      setMessageContent('');
+      setMessageDialogOpen(false);
+      
+      // Redirect to messages page to continue conversation
+      router.push('/messages');
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast.error('Failed to send message');
+    } finally {
+      setSendingMessage(false);
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'open':
@@ -292,6 +356,13 @@ export default function TechnicalDashboard() {
                               <div className="flex items-center justify-between">
                                 <h3 className="text-lg font-semibold text-gray-900">{complaint.title}</h3>
                                 <div className="flex space-x-2">
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline"
+                                    onClick={() => openMessageDialog(complaint)}
+                                  >
+                                    <MessageSquare className="h-4 w-4" />
+                                  </Button>
                                   <Button size="sm" onClick={() => handleAccept(complaint)}>
                                     Accept
                                   </Button>
@@ -351,6 +422,13 @@ export default function TechnicalDashboard() {
                               <div className="flex items-center justify-between">
                                 <h3 className="text-lg font-semibold text-gray-900">{complaint.title}</h3>
                                 <div className="flex space-x-2">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => openMessageDialog(complaint)}
+                                  >
+                                    <MessageSquare className="h-4 w-4" />
+                                  </Button>
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -435,6 +513,39 @@ export default function TechnicalDashboard() {
             </div>
           )}
         </main>
+
+        {/* Message Dialog */}
+        <Dialog open={messageDialogOpen} onOpenChange={setMessageDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Message {selectedComplaint?.raisedByName}</DialogTitle>
+              <DialogDescription>
+                Send a message about complaint: "{selectedComplaint?.title}"
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="message">Message</Label>
+                <Textarea
+                  id="message"
+                  value={messageContent}
+                  onChange={(e) => setMessageContent(e.target.value)}
+                  placeholder="Type your message here..."
+                  rows={4}
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button variant="outline" onClick={() => setMessageDialogOpen(false)} disabled={sendingMessage}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSendMessage} disabled={sendingMessage || !messageContent.trim()}>
+                  <Send className="h-4 w-4 mr-2" />
+                  {sendingMessage ? 'Sending...' : 'Send Message'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </FadeTransition>
   );

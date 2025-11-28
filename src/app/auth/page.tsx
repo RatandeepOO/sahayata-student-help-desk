@@ -8,11 +8,6 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { CalendarIcon } from 'lucide-react';
-import { format } from 'date-fns';
-import { cn } from '@/lib/utils';
 import { saveUser, setCurrentUser, getUsers, isAdminCredential, getAdminDepartment, saveTechnicalMember } from '@/lib/storage';
 import { generateAvatar } from '@/lib/avatar';
 import { User, TechnicalTeamMember } from '@/lib/types';
@@ -37,7 +32,7 @@ export default function AuthPage() {
   const [semester, setSemester] = useState('');
   const [year, setYear] = useState('');
   const [gender, setGender] = useState<'male' | 'female' | 'other'>('male');
-  const [dob, setDob] = useState<Date>();
+  const [dob, setDob] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   
   // Signup state - Technical
@@ -49,6 +44,36 @@ export default function AuthPage() {
   
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Validate DD/MM/YYYY format
+  const validateDOB = (dateString: string): boolean => {
+    const regex = /^(\d{2})\/(\d{2})\/(\d{4})$/;
+    if (!regex.test(dateString)) return false;
+    
+    const match = dateString.match(regex);
+    if (!match) return false;
+    
+    const day = parseInt(match[1], 10);
+    const month = parseInt(match[2], 10);
+    const year = parseInt(match[3], 10);
+    
+    // Check valid ranges
+    if (month < 1 || month > 12) return false;
+    if (day < 1 || day > 31) return false;
+    if (year < 1900 || year > new Date().getFullYear()) return false;
+    
+    // Check days in month
+    const daysInMonth = new Date(year, month, 0).getDate();
+    if (day > daysInMonth) return false;
+    
+    return true;
+  };
+
+  // Convert DD/MM/YYYY to YYYY-MM-DD
+  const convertDOBToISO = (dateString: string): string => {
+    const [day, month, year] = dateString.split('/');
+    return `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,6 +147,12 @@ export default function AuthPage() {
       setError('Please fill in all required fields');
       return;
     }
+
+    // Validate DOB format if provided
+    if (dob && !validateDOB(dob)) {
+      setError('Invalid date format. Please use DD/MM/YYYY format (e.g., 25/12/2000)');
+      return;
+    }
     
     setLoading(true);
     
@@ -137,7 +168,7 @@ export default function AuthPage() {
         semester,
         year,
         gender,
-        dob: dob ? format(dob, 'yyyy-MM-dd') : undefined,
+        dob: dob ? convertDOBToISO(dob) : undefined,
         profilePicture: generateAvatar(gender, studentEmail),
         phoneNumber,
         points: 0,
@@ -418,30 +449,17 @@ export default function AuthPage() {
                     </div>
                     
                     <div className="space-y-2">
-                      <Label>Date of Birth</Label>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "w-full justify-start text-left font-normal",
-                              !dob && "text-muted-foreground"
-                            )}
-                            disabled={loading}
-                          >
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {dob ? format(dob, "PPP") : <span>Pick a date</span>}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0">
-                          <Calendar
-                            mode="single"
-                            selected={dob}
-                            onSelect={setDob}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
+                      <Label htmlFor="dob">Date of Birth (DD/MM/YYYY)</Label>
+                      <Input
+                        id="dob"
+                        type="text"
+                        value={dob}
+                        onChange={(e) => setDob(e.target.value)}
+                        placeholder="25/12/2000"
+                        disabled={loading}
+                        maxLength={10}
+                      />
+                      <p className="text-xs text-gray-500">Format: DD/MM/YYYY (e.g., 25/12/2000)</p>
                     </div>
                     
                     {error && <p className="text-sm text-red-600">{error}</p>}
