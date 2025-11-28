@@ -244,8 +244,8 @@ export default function TechnicalDashboard() {
       setMessageContent('');
       setMessageDialogOpen(false);
       
-      // Redirect to messages page to continue conversation
-      router.push('/messages');
+      // Redirect to messages page with userId parameter to auto-open conversation
+      router.push(`/messages?userId=${selectedComplaint.raisedBy}`);
     } catch (error) {
       console.error('Error sending message:', error);
       toast.error('Failed to send message');
