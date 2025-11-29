@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { saveUser, setCurrentUser, getUsers, isAdminCredential, getAdminDepartment, saveTechnicalMember } from '@/lib/storage';
+import { setCurrentUser } from '@/lib/storage';
 import { generateAvatar } from '@/lib/avatar';
 import { User, TechnicalTeamMember } from '@/lib/types';
 import Image from 'next/image';
@@ -81,23 +81,7 @@ export default function AuthPage() {
     setLoading(true);
     
     try {
-      // Check admin credentials
-      if (isAdminCredential(loginEmail, loginPassword)) {
-        const adminUser: User = {
-          id: Date.now(),
-          email: loginEmail,
-          password: loginPassword,
-          role: 'admin',
-          name: 'Admin',
-          branch: getAdminDepartment(loginEmail),
-          points: 0,
-        };
-        setCurrentUser(adminUser);
-        router.push('/admin/dashboard');
-        return;
-      }
-      
-      // Try API login first
+      // Login via API (handles all user types including admins from database)
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -108,21 +92,10 @@ export default function AuthPage() {
         const user = await res.json();
         setCurrentUser(user);
         
-        if (user.role === 'student') {
-          router.push('/dashboard');
-        } else if (user.role === 'technical') {
-          router.push('/technical/dashboard');
-        }
-        return;
-      }
-      
-      // Fallback to localStorage
-      const users = getUsers();
-      const user = users.find((u) => u.email === loginEmail && u.password === loginPassword);
-      
-      if (user) {
-        setCurrentUser(user);
-        if (user.role === 'student') {
+        // Route based on user role
+        if (user.role === 'admin') {
+          router.push('/admin/dashboard');
+        } else if (user.role === 'student') {
           router.push('/dashboard');
         } else if (user.role === 'technical') {
           router.push('/technical/dashboard');

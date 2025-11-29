@@ -1,25 +1,5 @@
 import { User, Complaint, Message, Notification, TechnicalTeamMember } from './types';
 
-// Admin credentials
-export const ADMIN_CREDENTIALS = [
-  { email: 'cse@sahayata.com', password: 'CSEADMIN', department: 'CSE' },
-  { email: 'elex@sahayata.com', password: 'ELEXADMIN', department: 'Electronics' },
-  { email: 'pharma@sahayata.com', password: 'PHARMAADMIN', department: 'Pharmacy' },
-  { email: 'mech@sahayata.com', password: 'MECHADMIN', department: 'Mechanical' },
-  { email: 'elec@sahayata.com', password: 'ELECADMIN', department: 'Electrical' },
-];
-
-export const isAdminCredential = (email: string, password: string) => {
-  return ADMIN_CREDENTIALS.some(
-    (admin) => admin.email === email && admin.password === password
-  );
-};
-
-export const getAdminDepartment = (email: string) => {
-  const admin = ADMIN_CREDENTIALS.find((a) => a.email === email);
-  return admin?.department || '';
-};
-
 // LocalStorage keys
 const USERS_KEY = 'sahayata_users';
 const CURRENT_USER_KEY = 'sahayata_current_user';
