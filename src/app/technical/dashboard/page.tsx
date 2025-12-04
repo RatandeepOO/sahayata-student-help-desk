@@ -11,11 +11,23 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertCircle, CheckCircle2, Clock, ArrowRight, MessageSquare, Send } from 'lucide-react';
 import { format } from 'date-fns';
 import { getPointsForDifficulty } from '@/lib/avatar';
 import { toast } from 'sonner';
 import Image from 'next/image';
+
+// Technical team member interface
+interface TechnicalTeamMember {
+  id: number;
+  userId: number;
+  name: string;
+  department: string;
+  email: string;
+  phoneNumber: string;
+  available: boolean;
+}
 
 export default function TechnicalDashboard() {
   const router = useRouter();
@@ -23,6 +35,7 @@ export default function TechnicalDashboard() {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [myComplaints, setMyComplaints] = useState<Complaint[]>([]);
   const [loading, setLoading] = useState(true);
+  const [technicalTeamMembers, setTechnicalTeamMembers] = useState<TechnicalTeamMember[]>([]);
 
   // Image preview dialog
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
@@ -36,6 +49,7 @@ export default function TechnicalDashboard() {
     }
     setUser(currentUser);
     loadComplaints(currentUser);
+    loadTechnicalTeam(currentUser);
   }, [router]);
 
   const loadComplaints = async (currentUser: User) => {
@@ -61,6 +75,20 @@ export default function TechnicalDashboard() {
       toast.error('Failed to load complaints');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadTechnicalTeam = async (currentUser: User) => {
+    try {
+      // Load all technical team members from the same department
+      const res = await fetch(`/api/technical-team?department=${currentUser.department}&limit=100`);
+      if (res.ok) {
+        const members = await res.json();
+        // Filter out the current user
+        setTechnicalTeamMembers(members.filter((m: TechnicalTeamMember) => m.userId !== currentUser.id));
+      }
+    } catch (error) {
+      console.error('Error loading technical team:', error);
     }
   };
 
@@ -103,7 +131,7 @@ export default function TechnicalDashboard() {
     }
   };
 
-  const handleTransfer = async (complaint: Complaint) => {
+  const handleTransfer = async (complaint: Complaint, teamMember: TechnicalTeamMember) => {
     if (!user) return;
 
     try {
@@ -111,26 +139,26 @@ export default function TechnicalDashboard() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          status: 'open',
-          volunteerId: null,
-          volunteerName: null,
+          status: 'in-progress',
+          volunteerId: teamMember.userId,
+          volunteerName: teamMember.name,
         }),
       });
 
       if (res.ok) {
-        // Send notification
+        // Send notification to complaint raiser
         await fetch('/api/notifications', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             userId: complaint.raisedBy,
             type: 'complaint_accepted',
-            message: `Your complaint "${complaint.title}" has been transferred and is now available for other team members.`,
+            message: `Your complaint "${complaint.title}" has been transferred to ${teamMember.name} from ${teamMember.department} team.`,
             complaintId: complaint.id,
           }),
         });
 
-        toast.success('Complaint transferred successfully');
+        toast.success(`Complaint transferred to ${teamMember.name}`);
         loadComplaints(user);
       } else {
         const error = await res.json();
@@ -398,14 +426,38 @@ export default function TechnicalDashboard() {
                                   >
                                     <MessageSquare className="h-4 w-4" />
                                   </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleTransfer(complaint)}
-                                  >
-                                    <ArrowRight className="h-4 w-4 mr-1" />
-                                    Transfer
-                                  </Button>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button size="sm" variant="outline">
+                                        <ArrowRight className="h-4 w-4 mr-1" />
+                                        Transfer
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end" className="w-64">
+                                      <DropdownMenuLabel>Transfer to Team Member</DropdownMenuLabel>
+                                      <DropdownMenuSeparator />
+                                      {technicalTeamMembers.length === 0 ? (
+                                        <div className="px-2 py-3 text-sm text-gray-500 text-center">
+                                          No other team members available
+                                        </div>
+                                      ) : (
+                                        technicalTeamMembers.map((member) => (
+                                          <DropdownMenuItem
+                                            key={member.id}
+                                            onClick={() => handleTransfer(complaint, member)}
+                                            className="cursor-pointer"
+                                          >
+                                            <div className="flex flex-col">
+                                              <span className="font-medium">{member.name}</span>
+                                              <span className="text-xs text-gray-500">
+                                                {member.department} • {member.available ? 'Available' : 'Busy'}
+                                              </span>
+                                            </div>
+                                          </DropdownMenuItem>
+                                        ))
+                                      )}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
                                   <Button size="sm" onClick={() => handleResolve(complaint)}>
                                     <CheckCircle2 className="h-4 w-4 mr-1" />
                                     Mark Resolved
