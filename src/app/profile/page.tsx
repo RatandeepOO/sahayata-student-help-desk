@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import FadeTransition from '@/components/FadeTransition';
 import Navbar from '@/components/Navbar';
@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, Upload, X } from 'lucide-react';
 import { generateAvatar } from '@/lib/avatar';
 import Link from 'next/link';
 
@@ -26,6 +26,8 @@ export default function ProfilePage() {
   const [gender, setGender] = useState<'male' | 'female' | 'other'>('male');
   const [profilePicture, setProfilePicture] = useState('');
   const [success, setSuccess] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const currentUser = getCurrentUser();
@@ -67,6 +69,54 @@ export default function ProfilePage() {
     setProfilePicture(newAvatar);
   };
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File size must be less than 5MB');
+      return;
+    }
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file');
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const response = await fetch('/api/upload-image', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to upload image');
+      }
+
+      const data = await response.json();
+      setProfilePicture(data.url);
+    } catch (error) {
+      console.error('Upload error:', error);
+      alert('Failed to upload image. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setProfilePicture('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   if (!user) return null;
 
   return (
@@ -99,18 +149,40 @@ export default function ProfilePage() {
                   <AvatarFallback className="text-2xl">{name[0]}</AvatarFallback>
                 </Avatar>
                 <div className="space-y-2">
-                  <Label>Profile Picture URL</Label>
-                  <div className="flex space-x-2">
-                    <Input
-                      value={profilePicture}
-                      onChange={(e) => setProfilePicture(e.target.value)}
-                      placeholder="https://example.com/avatar.jpg"
-                      className="w-64"
+                  <Label>Profile Picture</Label>
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleFileSelect}
+                      className="hidden"
                     />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      {uploading ? 'Uploading...' : 'Upload Picture'}
+                    </Button>
                     <Button type="button" variant="outline" onClick={handleGenerateAvatar}>
                       Generate Avatar
                     </Button>
+                    {profilePicture && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleRemoveImage}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Remove
+                      </Button>
+                    )}
                   </div>
+                  <p className="text-xs text-gray-500">Upload an image (max 5MB). Images will be converted to WebP format.</p>
                 </div>
               </div>
 
