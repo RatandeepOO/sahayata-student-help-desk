@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import FadeTransition from '@/components/FadeTransition';
 import Navbar from '@/components/Navbar';
@@ -18,12 +18,13 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { CalendarIcon, Plus, AlertCircle, CheckCircle2, Clock, FileText, MessageSquare, Trophy, Send } from 'lucide-react';
+import { CalendarIcon, Plus, AlertCircle, CheckCircle2, Clock, FileText, MessageSquare, Trophy, Send, Upload, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { getPointsForDifficulty } from '@/lib/avatar';
 import { toast } from 'sonner';
+import Image from 'next/image';
 
 export default function Dashboard() {
   const router = useRouter();
@@ -44,12 +45,18 @@ export default function Dashboard() {
   const [emergency, setEmergency] = useState(false);
   const [fixTillDate, setFixTillDate] = useState<Date>();
   const [photo, setPhoto] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Chat state
   const [chatDialogOpen, setChatDialogOpen] = useState(false);
   const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
   const [chatMessage, setChatMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
+
+  // Image preview dialog
+  const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState('');
 
   useEffect(() => {
     const currentUser = getCurrentUser();
@@ -91,6 +98,48 @@ export default function Dashboard() {
       toast.error('Failed to load data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size must be less than 5MB');
+      return;
+    }
+
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const res = await fetch('/api/upload-image', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setPhoto(data.url);
+        toast.success('Image uploaded successfully');
+      } else {
+        const error = await res.json();
+        toast.error(error.error || 'Failed to upload image');
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      toast.error('Failed to upload image');
+    } finally {
+      setUploadingImage(false);
     }
   };
 
@@ -282,63 +331,24 @@ export default function Dashboard() {
   };
 
   const openChat = (complaint: Complaint) => {
-    setSelectedComplaint(complaint);
-    setChatDialogOpen(true);
-  };
-  
-  const handleSendMessage = async () => {
-    if (!user || !selectedComplaint || !chatMessage.trim() || sendingMessage) return;
+    if (!user) return;
     
-    const receiverId = selectedComplaint.volunteerId === user.id 
-      ? selectedComplaint.raisedBy 
-      : selectedComplaint.volunteerId;
+    const receiverId = complaint.volunteerId === user.id 
+      ? complaint.raisedBy 
+      : complaint.volunteerId;
     
     if (!receiverId) {
       toast.error('No recipient found');
       return;
     }
 
-    setSendingMessage(true);
-    try {
-      // Send message
-      const messageRes = await fetch('/api/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          senderId: user.id,
-          senderName: user.name,
-          receiverId,
-          complaintId: selectedComplaint.id,
-          content: chatMessage.trim(),
-        }),
-      });
+    // Redirect to messages page with userId and default message
+    router.push(`/messages?userId=${receiverId}&defaultMessage=${encodeURIComponent(`Hello, I am ${user.name}`)}`);
+  };
 
-      if (!messageRes.ok) {
-        const error = await messageRes.json();
-        toast.error(error.error || 'Failed to send message');
-        return;
-      }
-
-      // Send notification
-      await fetch('/api/notifications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: receiverId,
-          type: 'new_message',
-          message: `New message from ${user.name} about "${selectedComplaint.title}"`,
-          complaintId: selectedComplaint.id,
-        }),
-      });
-
-      toast.success('Message sent');
-      setChatMessage('');
-    } catch (error) {
-      console.error('Error sending message:', error);
-      toast.error('Failed to send message');
-    } finally {
-      setSendingMessage(false);
-    }
+  const openImagePreview = (imageUrl: string) => {
+    setPreviewImageUrl(imageUrl);
+    setImagePreviewOpen(true);
   };
 
   const getChartData = () => {
@@ -508,13 +518,45 @@ export default function Dashboard() {
                           </div>
 
                           <div className="space-y-2">
-                            <Label htmlFor="photo">Photo URL (Optional)</Label>
-                            <Input
-                              id="photo"
-                              value={photo}
-                              onChange={(e) => setPhoto(e.target.value)}
-                              placeholder="https://example.com/image.jpg"
-                            />
+                            <Label htmlFor="photo">Photo (Optional)</Label>
+                            <div className="flex flex-col space-y-2">
+                              <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                onChange={handleImageUpload}
+                                className="hidden"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={uploadingImage}
+                                className="w-full"
+                              >
+                                <Upload className="h-4 w-4 mr-2" />
+                                {uploadingImage ? 'Uploading...' : 'Upload Image'}
+                              </Button>
+                              {photo && (
+                                <div className="relative w-full h-40 border rounded-lg overflow-hidden">
+                                  <Image
+                                    src={photo}
+                                    alt="Complaint photo"
+                                    fill
+                                    className="object-cover"
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="icon"
+                                    className="absolute top-2 right-2"
+                                    onClick={() => setPhoto('')}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
                           </div>
 
                           <div className="flex items-center space-x-2">
@@ -627,6 +669,21 @@ export default function Dashboard() {
                                   </Badge>
                                 </div>
                                 <p className="text-gray-600 mt-1">{complaint.description}</p>
+                                {complaint.photo && (
+                                  <div className="mt-2">
+                                    <button
+                                      onClick={() => openImagePreview(complaint.photo!)}
+                                      className="relative w-32 h-32 border rounded-lg overflow-hidden hover:opacity-80 transition-opacity"
+                                    >
+                                      <Image
+                                        src={complaint.photo}
+                                        alt="Complaint photo"
+                                        fill
+                                        className="object-cover"
+                                      />
+                                    </button>
+                                  </div>
+                                )}
                                 <div className="flex flex-wrap gap-2 mt-2">
                                   <Badge variant="outline">{complaint.category}</Badge>
                                   <Badge variant="outline">{complaint.difficulty}</Badge>
@@ -730,6 +787,21 @@ export default function Dashboard() {
                                     By {complaint.raisedByName} • {complaint.raisedByBranch}
                                   </p>
                                   <p className="text-gray-600 mt-2">{complaint.description}</p>
+                                  {complaint.photo && (
+                                    <div className="mt-2">
+                                      <button
+                                        onClick={() => openImagePreview(complaint.photo!)}
+                                        className="relative w-32 h-32 border rounded-lg overflow-hidden hover:opacity-80 transition-opacity"
+                                      >
+                                        <Image
+                                          src={complaint.photo}
+                                          alt="Complaint photo"
+                                          fill
+                                          className="object-cover"
+                                        />
+                                      </button>
+                                    </div>
+                                  )}
                                   <div className="flex flex-wrap gap-2 mt-2">
                                     <Badge variant="outline">{complaint.category}</Badge>
                                     <Badge variant="outline">
@@ -799,6 +871,21 @@ export default function Dashboard() {
                                     By {complaint.raisedByName} • {complaint.raisedByBranch}
                                   </p>
                                   <p className="text-gray-600 mt-2">{complaint.description}</p>
+                                  {complaint.photo && (
+                                    <div className="mt-2">
+                                      <button
+                                        onClick={() => openImagePreview(complaint.photo!)}
+                                        className="relative w-32 h-32 border rounded-lg overflow-hidden hover:opacity-80 transition-opacity"
+                                      >
+                                        <Image
+                                          src={complaint.photo}
+                                          alt="Complaint photo"
+                                          fill
+                                          className="object-cover"
+                                        />
+                                      </button>
+                                    </div>
+                                  )}
                                   <div className="flex flex-wrap gap-2 mt-2">
                                     <Badge variant="outline">{complaint.category}</Badge>
                                     <Badge variant="outline">
@@ -884,33 +971,21 @@ export default function Dashboard() {
           )}
         </main>
         
-        {/* Chat Dialog */}
-        <Dialog open={chatDialogOpen} onOpenChange={setChatDialogOpen}>
-          <DialogContent>
+        {/* Image Preview Dialog */}
+        <Dialog open={imagePreviewOpen} onOpenChange={setImagePreviewOpen}>
+          <DialogContent className="max-w-4xl">
             <DialogHeader>
-              <DialogTitle>Chat about: {selectedComplaint?.title}</DialogTitle>
-              <DialogDescription>
-                Discuss this complaint with {selectedComplaint?.volunteerId === user.id ? selectedComplaint?.raisedByName : selectedComplaint?.volunteerName}
-              </DialogDescription>
+              <DialogTitle>Image Preview</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
-              <div className="h-64 border rounded-lg p-4 overflow-y-auto bg-gray-50">
-                <p className="text-sm text-gray-500 text-center">
-                  Chat history would appear here in a full implementation
-                </p>
-              </div>
-              <div className="flex space-x-2">
-                <Input
-                  placeholder="Type your message..."
-                  value={chatMessage}
-                  onChange={(e) => setChatMessage(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && !sendingMessage && handleSendMessage()}
-                  disabled={sendingMessage}
+            <div className="relative w-full h-[70vh]">
+              {previewImageUrl && (
+                <Image
+                  src={previewImageUrl}
+                  alt="Complaint image"
+                  fill
+                  className="object-contain"
                 />
-                <Button onClick={handleSendMessage} disabled={sendingMessage || !chatMessage.trim()}>
-                  <Send className="h-4 w-4" />
-                </Button>
-              </div>
+              )}
             </div>
           </DialogContent>
         </Dialog>

@@ -11,12 +11,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { AlertCircle, CheckCircle2, Clock, ArrowRight, MessageSquare, Send } from 'lucide-react';
 import { format } from 'date-fns';
 import { getPointsForDifficulty } from '@/lib/avatar';
 import { toast } from 'sonner';
+import Image from 'next/image';
 
 export default function TechnicalDashboard() {
   const router = useRouter();
@@ -25,11 +24,9 @@ export default function TechnicalDashboard() {
   const [myComplaints, setMyComplaints] = useState<Complaint[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Message dialog state
-  const [messageDialogOpen, setMessageDialogOpen] = useState(false);
-  const [selectedComplaint, setSelectedComplaint] = useState<Complaint | null>(null);
-  const [messageContent, setMessageContent] = useState('');
-  const [sendingMessage, setSendingMessage] = useState(false);
+  // Image preview dialog
+  const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState('');
 
   useEffect(() => {
     const currentUser = getCurrentUser();
@@ -199,59 +196,16 @@ export default function TechnicalDashboard() {
     }
   };
 
-  const openMessageDialog = (complaint: Complaint) => {
-    setSelectedComplaint(complaint);
-    setMessageDialogOpen(true);
+  const openChat = (complaint: Complaint) => {
+    if (!user) return;
+    
+    // Redirect to messages page with userId and default message
+    router.push(`/messages?userId=${complaint.raisedBy}&defaultMessage=${encodeURIComponent(`Hello, I am ${user.name}`)}`);
   };
 
-  const handleSendMessage = async () => {
-    if (!user || !selectedComplaint || !messageContent.trim() || sendingMessage) return;
-
-    setSendingMessage(true);
-    try {
-      // Send message
-      const messageRes = await fetch('/api/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          senderId: user.id,
-          senderName: user.name,
-          receiverId: selectedComplaint.raisedBy,
-          content: messageContent.trim(),
-          complaintId: selectedComplaint.id,
-        }),
-      });
-
-      if (!messageRes.ok) {
-        const error = await messageRes.json();
-        toast.error(error.error || 'Failed to send message');
-        return;
-      }
-
-      // Send notification
-      await fetch('/api/notifications', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: selectedComplaint.raisedBy,
-          type: 'new_message',
-          message: `New message from ${user.name} about complaint "${selectedComplaint.title}": ${messageContent.substring(0, 50)}${messageContent.length > 50 ? '...' : ''}`,
-          complaintId: selectedComplaint.id,
-        }),
-      });
-
-      toast.success('Message sent successfully');
-      setMessageContent('');
-      setMessageDialogOpen(false);
-      
-      // Redirect to messages page with userId parameter to auto-open conversation
-      router.push(`/messages?userId=${selectedComplaint.raisedBy}`);
-    } catch (error) {
-      console.error('Error sending message:', error);
-      toast.error('Failed to send message');
-    } finally {
-      setSendingMessage(false);
-    }
+  const openImagePreview = (imageUrl: string) => {
+    setPreviewImageUrl(imageUrl);
+    setImagePreviewOpen(true);
   };
 
   const getStatusColor = (status: string) => {
@@ -359,7 +313,7 @@ export default function TechnicalDashboard() {
                                   <Button 
                                     size="sm" 
                                     variant="outline"
-                                    onClick={() => openMessageDialog(complaint)}
+                                    onClick={() => openChat(complaint)}
                                   >
                                     <MessageSquare className="h-4 w-4" />
                                   </Button>
@@ -372,6 +326,21 @@ export default function TechnicalDashboard() {
                                 By {complaint.raisedByName} • {complaint.raisedByBranch}
                               </p>
                               <p className="text-gray-600 mt-2">{complaint.description}</p>
+                              {complaint.photo && (
+                                <div className="mt-2">
+                                  <button
+                                    onClick={() => openImagePreview(complaint.photo!)}
+                                    className="relative w-32 h-32 border rounded-lg overflow-hidden hover:opacity-80 transition-opacity"
+                                  >
+                                    <Image
+                                      src={complaint.photo}
+                                      alt="Complaint photo"
+                                      fill
+                                      className="object-cover"
+                                    />
+                                  </button>
+                                </div>
+                              )}
                               <div className="flex flex-wrap gap-2 mt-2">
                                 <Badge variant="outline">{complaint.category}</Badge>
                                 <Badge variant="outline">
@@ -425,7 +394,7 @@ export default function TechnicalDashboard() {
                                   <Button
                                     size="sm"
                                     variant="outline"
-                                    onClick={() => openMessageDialog(complaint)}
+                                    onClick={() => openChat(complaint)}
                                   >
                                     <MessageSquare className="h-4 w-4" />
                                   </Button>
@@ -447,6 +416,21 @@ export default function TechnicalDashboard() {
                                 By {complaint.raisedByName} • {complaint.raisedByBranch}
                               </p>
                               <p className="text-gray-600 mt-2">{complaint.description}</p>
+                              {complaint.photo && (
+                                <div className="mt-2">
+                                  <button
+                                    onClick={() => openImagePreview(complaint.photo!)}
+                                    className="relative w-32 h-32 border rounded-lg overflow-hidden hover:opacity-80 transition-opacity"
+                                  >
+                                    <Image
+                                      src={complaint.photo}
+                                      alt="Complaint photo"
+                                      fill
+                                      className="object-cover"
+                                    />
+                                  </button>
+                                </div>
+                              )}
                               <div className="flex flex-wrap gap-2 mt-2">
                                 <Badge variant="outline">{complaint.category}</Badge>
                                 <Badge variant="outline">
@@ -514,35 +498,21 @@ export default function TechnicalDashboard() {
           )}
         </main>
 
-        {/* Message Dialog */}
-        <Dialog open={messageDialogOpen} onOpenChange={setMessageDialogOpen}>
-          <DialogContent>
+        {/* Image Preview Dialog */}
+        <Dialog open={imagePreviewOpen} onOpenChange={setImagePreviewOpen}>
+          <DialogContent className="max-w-4xl">
             <DialogHeader>
-              <DialogTitle>Message {selectedComplaint?.raisedByName}</DialogTitle>
-              <DialogDescription>
-                Send a message about complaint: "{selectedComplaint?.title}"
-              </DialogDescription>
+              <DialogTitle>Image Preview</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="message">Message</Label>
-                <Textarea
-                  id="message"
-                  value={messageContent}
-                  onChange={(e) => setMessageContent(e.target.value)}
-                  placeholder="Type your message here..."
-                  rows={4}
+            <div className="relative w-full h-[70vh]">
+              {previewImageUrl && (
+                <Image
+                  src={previewImageUrl}
+                  alt="Complaint image"
+                  fill
+                  className="object-contain"
                 />
-              </div>
-              <div className="flex justify-end space-x-2">
-                <Button variant="outline" onClick={() => setMessageDialogOpen(false)} disabled={sendingMessage}>
-                  Cancel
-                </Button>
-                <Button onClick={handleSendMessage} disabled={sendingMessage || !messageContent.trim()}>
-                  <Send className="h-4 w-4 mr-2" />
-                  {sendingMessage ? 'Sending...' : 'Send Message'}
-                </Button>
-              </div>
+              )}
             </div>
           </DialogContent>
         </Dialog>

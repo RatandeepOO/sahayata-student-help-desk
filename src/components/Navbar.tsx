@@ -76,7 +76,7 @@ export default function Navbar({ activeTab, onTabChange, tabs = [] }: NavbarProp
               height={40}
               className="rounded-full"
             />
-            <span className="text-xl font-bold text-gray-900">Sahayata</span>
+            <span className="text-xl font-bold text-gray-900 hidden sm:block">Sahayata</span>
           </button>
 
           {/* Desktop Navigation */}
@@ -99,7 +99,7 @@ export default function Navbar({ activeTab, onTabChange, tabs = [] }: NavbarProp
           )}
 
           {/* Right Section */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-2 sm:space-x-4">
             {/* Home Button - Visible on mobile */}
             <Button 
               variant="ghost" 
@@ -136,17 +136,20 @@ export default function Navbar({ activeTab, onTabChange, tabs = [] }: NavbarProp
             {/* Profile Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="flex items-center space-x-2">
+                <Button variant="ghost" className="flex items-center space-x-2 px-2 sm:px-3">
                   {user?.profilePicture ? (
-                    <Image
-                      src={user.profilePicture}
-                      alt={user.name}
-                      width={32}
-                      height={32}
-                      className="rounded-full"
-                    />
+                    <div className="relative h-8 w-8 rounded-full overflow-hidden">
+                      <Image
+                        src={user.profilePicture}
+                        alt={user.name}
+                        fill
+                        className="object-cover"
+                      />
+                    </div>
                   ) : (
-                    <User className="h-5 w-5" />
+                    <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
+                      <User className="h-5 w-5 text-gray-600" />
+                    </div>
                   )}
                   <span className="hidden md:block">{user?.name}</span>
                 </Button>
@@ -192,7 +195,11 @@ export default function Navbar({ activeTab, onTabChange, tabs = [] }: NavbarProp
                     {tabs.map((tab) => (
                       <button
                         key={tab.id}
-                        onClick={() => onTabChange?.(tab.id)}
+                        onClick={() => {
+                          onTabChange?.(tab.id);
+                          // Close the sheet after selection
+                          document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+                        }}
                         className={`px-4 py-3 rounded-lg font-medium text-left transition-colors ${
                           activeTab === tab.id
                             ? 'bg-blue-100 text-blue-700'

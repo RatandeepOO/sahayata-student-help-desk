@@ -62,6 +62,8 @@ export default function MessagesPage() {
   useEffect(() => {
     if (user && allUsers.length > 0 && !selectedConversation) {
       const userIdParam = searchParams.get('userId');
+      const defaultMessage = searchParams.get('defaultMessage');
+      
       if (userIdParam) {
         const targetUserId = parseInt(userIdParam);
         
@@ -82,6 +84,11 @@ export default function MessagesPage() {
               unreadCount: 0
             });
           }
+        }
+        
+        // Set default message if provided
+        if (defaultMessage) {
+          setMessageContent(decodeURIComponent(defaultMessage));
         }
       }
     }
@@ -364,7 +371,7 @@ export default function MessagesPage() {
                           <div className="flex items-center justify-between">
                             <p className="text-sm text-gray-500 truncate flex-1">{conv.lastMessage}</p>
                             {conv.unreadCount > 0 && (
-                              <span className="ml-2 bg-blue-600 text-white text-xs rounded-full px-2 py-0.5 min-w-5[20px] text-center">
+                              <span className="ml-2 bg-blue-600 text-white text-xs rounded-full px-2 py-0.5 min-w-[20px] text-center">
                                 {conv.unreadCount}
                               </span>
                             )}
@@ -464,7 +471,7 @@ export default function MessagesPage() {
                                 : 'bg-white text-gray-900 border border-gray-200 rounded-bl-sm'
                             }`}
                           >
-                            <p className="warp-break-words whitespace-pre-wrap">{msg.content}</p>
+                            <p className="break-words whitespace-pre-wrap">{msg.content}</p>
                             <p
                               className={`text-xs mt-1 ${
                                 isSent ? 'text-blue-100' : 'text-gray-400'
