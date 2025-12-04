@@ -16,9 +16,10 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Trash2, MessageSquare, Send, Trophy, UserPlus, Users } from 'lucide-react';
+import { Trash2, MessageSquare, Send, Trophy, UserPlus, Users, Upload, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import Image from 'next/image';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -52,8 +53,10 @@ export default function AdminDashboard() {
     year: '',
     gender: 'male' as 'male' | 'female' | 'other',
     phoneNumber: '',
+    profilePicture: '',
   });
   const [addingStudent, setAddingStudent] = useState(false);
+  const [uploadingStudentImage, setUploadingStudentImage] = useState(false);
 
   // Add technical team dialog state
   const [addTechDialogOpen, setAddTechDialogOpen] = useState(false);
@@ -70,6 +73,10 @@ export default function AdminDashboard() {
   const [deleteUserDialogOpen, setDeleteUserDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<{ id: string; type: 'student' | 'tech'; name: string } | null>(null);
   const [deletingUser, setDeletingUser] = useState(false);
+
+  // Image preview dialog
+  const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState('');
 
   useEffect(() => {
     const currentUser = getCurrentUser();
@@ -230,6 +237,48 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleStudentImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+
+    // Validate file size (5MB max)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size must be less than 5MB');
+      return;
+    }
+
+    setUploadingStudentImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const res = await fetch('/api/upload-image', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setStudentForm({ ...studentForm, profilePicture: data.url });
+        toast.success('Image uploaded successfully');
+      } else {
+        const error = await res.json();
+        toast.error(error.error || 'Failed to upload image');
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error);
+      toast.error('Failed to upload image');
+    } finally {
+      setUploadingStudentImage(false);
+    }
+  };
+
   const handleAddStudent = async () => {
     if (addingStudent) return;
 
@@ -241,17 +290,21 @@ export default function AdminDashboard() {
 
     setAddingStudent(true);
     try {
+      // Use uploaded image or generate default based on gender
+      const profilePicture = studentForm.profilePicture || 
+        (studentForm.gender === 'male' 
+          ? 'https://api.dicebear.com/7.x/avataaars/svg?seed=male'
+          : studentForm.gender === 'female'
+          ? 'https://api.dicebear.com/7.x/avataaars/svg?seed=female'
+          : 'https://api.dicebear.com/7.x/avataaars/svg?seed=other');
+
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...studentForm,
           role: 'student',
-          profilePicture: studentForm.gender === 'male' 
-            ? 'https://api.dicebear.com/7.x/avataaars/svg?seed=male'
-            : studentForm.gender === 'female'
-            ? 'https://api.dicebear.com/7.x/avataaars/svg?seed=female'
-            : 'https://api.dicebear.com/7.x/avataaars/svg?seed=other',
+          profilePicture,
         }),
       });
 
@@ -268,6 +321,7 @@ export default function AdminDashboard() {
           year: '',
           gender: 'male',
           phoneNumber: '',
+          profilePicture: '',
         });
         loadData();
       } else {
@@ -410,6 +464,11 @@ export default function AdminDashboard() {
     }
   };
 
+  const openImagePreview = (imageUrl: string) => {
+    setPreviewImageUrl(imageUrl);
+    setImagePreviewOpen(true);
+  };
+
   const tabs = [
     { id: 'complaints', label: 'Complaints' },
     { id: 'technical', label: 'Technical Team' },
@@ -518,6 +577,21 @@ export default function AdminDashboard() {
                                     By {complaint.raisedByName} • {complaint.raisedByBranch}
                                   </p>
                                   <p className="text-gray-600 mt-2">{complaint.description}</p>
+                                  {complaint.photo && (
+                                    <div className="mt-2">
+                                      <button
+                                        onClick={() => openImagePreview(complaint.photo!)}
+                                        className="relative w-32 h-32 border rounded-lg overflow-hidden hover:opacity-80 transition-opacity"
+                                      >
+                                        <Image
+                                          src={complaint.photo}
+                                          alt="Complaint photo"
+                                          fill
+                                          className="object-cover"
+                                        />
+                                      </button>
+                                    </div>
+                                  )}
                                   <div className="flex flex-wrap gap-2 mt-2">
                                     <Badge variant="outline">{complaint.category}</Badge>
                                     <Badge variant="outline">{complaint.difficulty}</Badge>
@@ -879,6 +953,52 @@ export default function AdminDashboard() {
                   placeholder="e.g., +91 9876543210"
                 />
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="student-profile">Profile Picture</Label>
+                <div className="flex flex-col space-y-2">
+                  <input
+                    id="student-profile"
+                    type="file"
+                    accept="image/*"
+                    onChange={handleStudentImageUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => document.getElementById('student-profile')?.click()}
+                    disabled={uploadingStudentImage}
+                    className="w-full"
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    {uploadingStudentImage ? 'Uploading...' : 'Upload Profile Picture'}
+                  </Button>
+                  {studentForm.profilePicture && (
+                    <div className="relative w-full h-40 border rounded-lg overflow-hidden">
+                      <Image
+                        src={studentForm.profilePicture}
+                        alt="Profile picture"
+                        fill
+                        className="object-cover"
+                      />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-2 right-2"
+                        onClick={() => setStudentForm({ ...studentForm, profilePicture: '' })}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500">
+                    {studentForm.profilePicture 
+                      ? 'Custom profile picture uploaded' 
+                      : 'No image uploaded. A default avatar will be used based on gender.'}
+                  </p>
+                </div>
+              </div>
               <div className="flex justify-end space-x-2 pt-4">
                 <Button variant="outline" onClick={() => setAddStudentDialogOpen(false)} disabled={addingStudent}>
                   Cancel
@@ -985,6 +1105,25 @@ export default function AdminDashboard() {
               <Button variant="destructive" onClick={confirmDeleteUser} disabled={deletingUser}>
                 {deletingUser ? 'Deleting...' : 'Delete'}
               </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Image Preview Dialog */}
+        <Dialog open={imagePreviewOpen} onOpenChange={setImagePreviewOpen}>
+          <DialogContent className="max-w-4xl">
+            <DialogHeader>
+              <DialogTitle>Image Preview</DialogTitle>
+            </DialogHeader>
+            <div className="relative w-full h-[70vh]">
+              {previewImageUrl && (
+                <Image
+                  src={previewImageUrl}
+                  alt="Complaint image"
+                  fill
+                  className="object-contain"
+                />
+              )}
             </div>
           </DialogContent>
         </Dialog>

@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { getCurrentUser, logout, getNotifications } from '@/lib/storage';
 import { User as UserType } from '@/lib/types';
 import Image from 'next/image';
@@ -137,20 +138,12 @@ export default function Navbar({ activeTab, onTabChange, tabs = [] }: NavbarProp
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="flex items-center space-x-2 px-2 sm:px-3">
-                  {user?.profilePicture ? (
-                    <div className="relative h-8 w-8 rounded-full overflow-hidden">
-                      <Image
-                        src={user.profilePicture}
-                        alt={user.name}
-                        fill
-                        className="object-cover"
-                      />
-                    </div>
-                  ) : (
-                    <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
-                      <User className="h-5 w-5 text-gray-600" />
-                    </div>
-                  )}
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={user?.profilePicture} alt={user?.name} />
+                    <AvatarFallback>
+                      {user?.name ? user.name[0].toUpperCase() : <User className="h-5 w-5" />}
+                    </AvatarFallback>
+                  </Avatar>
                   <span className="hidden md:block">{user?.name}</span>
                 </Button>
               </DropdownMenuTrigger>
